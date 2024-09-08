@@ -323,7 +323,7 @@ aura_env.Show = function(_allstates)
         if time_left >= 9999 then
         elseif time_left >= 60 then
             local min = math.floor(time_left / 60)
-            local sec = math.ceil(time_left - min * 60)
+            local sec = math.floor(time_left - min * 60)
             text = text..min..":"
             if sec < 10 then
                 text = text.."0"..sec
@@ -331,9 +331,9 @@ aura_env.Show = function(_allstates)
                 text = text..sec
             end
         elseif time_left > 5 then
-            text = text..math.ceil(time_left)
+            text = text..math.floor(time_left)
         elseif time_left > 0 then
-            time_left = (math.ceil(time_left * 10) * 0.1)
+            time_left = (math.floor(time_left * 10) * 0.1)
             text = text..time_left
             if time_left == math.floor(time_left) then
                 text = text..".0"
@@ -357,7 +357,7 @@ aura_env.Show = function(_allstates)
             if time_left >= 9999 then
             elseif time_left >= 60 then
                 local min = math.floor(time_left / 60)
-                local sec = math.ceil(time_left - min * 60)
+                local sec = math.floor(time_left - min * 60)
                 extra_text = extra_text..min..":"
                 if sec < 10 then
                     extra_text = extra_text.."0"..sec
@@ -365,11 +365,11 @@ aura_env.Show = function(_allstates)
                     extra_text = extra_text..sec
                 end
             elseif time_left > 5 then
-                extra_text = extra_text..math.ceil(time_left)
+                extra_text = extra_text..math.floor(time_left)
             elseif time_left > 0 then
-                time_left = (math.ceil(time_left * 10) * 0.1)
+                time_left = (math.floor(time_left * 10) * 0.1)
                 extra_text = extra_text..time_left
-                if time_left == math.ceil(time_left) then
+                if time_left == math.floor(time_left) then
                     extra_text = extra_text..".0"
                 end
             end            

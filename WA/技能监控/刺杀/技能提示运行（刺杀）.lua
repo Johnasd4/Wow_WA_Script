@@ -3,6 +3,7 @@ function(_allstates, event, ...)
     if event == "TRAIT_CONFIG_UPDATED" then
         --重新初始化
         aura_env.Init()
+        print("天赋已更新，重新加载技能提示组件")
     end
 
     if event == "COMBAT_LOG_EVENT_UNFILTERED" and aura_env.last_event ~= 1 then
@@ -25,22 +26,13 @@ function(_allstates, event, ...)
         else
             aura_env.pre_refresh_time = aura_env.time
         end
-
-        --阶段id
-        local stage_id = 0
-        --循环id
-        local loop_id = 0
-        --技能类型
-        local spell_type = 0
-        --技能
-        local spell
-        
+       
         --更新通用信息
         aura_env.UpdateCommonStatus()
-        --更新战斗资源信息
-        aura_env.UpdateResource()
         --更新gcd信息
         aura_env.UpdateGCD()
+        --更新战斗资源信息
+        aura_env.UpdateResource()
         --更新技能信息
         aura_env.UpdateSpell()
         --更新光环信息
@@ -49,37 +41,43 @@ function(_allstates, event, ...)
         aura_env.UpdateStackAura()
         --更新特殊光环信息
         aura_env.UpdateSpecialAura()
+        --更新目标信息
+        aura_env.UpdateTargetInfo()
         --更新附近敌对目标数量和最大血量（敌对目标数量，最大血量）
         aura_env.UpdateEnemyNumAndMaxHealth()
         --预估战斗剩余时间
         aura_env.EstimateBattleTimeLeft()
         --更新专属信息
-        aura_env.UpdateUniqueStatus()           
+        aura_env.UpdateStatus()    
+        --更新爆发信息
+        aura_env.UpdateBurstInfo()            
         --特殊技能显示判断
         aura_env.SpecialSpellDisplay()
 
         --计算后续技能数量
         for i = 1, aura_env.config.SkillQueueSize do        
             --计算当前属于哪个阶段（非战斗阶段，战斗阶段，爆发阶段，收尾阶段）
-            stage_id = aura_env.CalculateStageID()
+            aura_env.CalculateStageID()
             --根据阶段计算应当使用的技能循环
-            loop_id = aura_env.CalculateLoopID(stage_id)
+            aura_env.CalculateLoopID()
             --根据循环得出应当使用的技能或者技能类型
-            spell_type = aura_env.CalculateSpellTypeByLoopID(loop_id)
+            aura_env.CalculateSpellTypeByLoopID(true)
             --根据技能类型计算技能
-            spell = aura_env.CalculateSpellBySpellType(spell_type)
+            aura_env.CalculateSpellBySpellType()
             --将要使用的技能压入队列
-            aura_env.PushSpell(spell.name, spell.if_cast_now, spell.extra_text, i)
+            aura_env.PushSpell(i)
             --使用技能
-            aura_env.CastSpell(spell.name)
+            aura_env.CastSpell()
             --根据释放技能修改相关属性
-            aura_env.UpdateResouceByCastSpell(spell.name, spell_type.type, i)
+            aura_env.UpdateResouceByCastSpell(i)
             --根据释放技能更新冷却
-            aura_env.UpdateCooldownByCastSpell(spell.name)
+            aura_env.UpdateCooldownByCastSpell()
             --更新自然回复的战斗资源
             aura_env.UpdateResouce()
             --更新专属信息
-            aura_env.UpdateUniqueStatus()        
+            aura_env.UpdateStatus()        
+            --更新爆发信息
+            aura_env.UpdateBurstInfo()                 
         end
 
         --显示技能
