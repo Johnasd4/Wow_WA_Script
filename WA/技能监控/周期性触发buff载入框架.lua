@@ -1,20 +1,12 @@
 --[[aura_env.config = {
-    --技能的ID
-    SpellID = 0,
     --光环的ID
-    AuraID = 0,
-    --检测的单位名称（默认目标）
-    UnitName = "",
-    --是技能
-    IfSpell = true,
-    --是光环
-    IfSpellAura = true,
-    --是否自身光环
-    IfSelfAura = false,
+    AuraID = 0
     --是否正面光环
     IfHelpfulAura = false,
-    --光环检测影响单位数量
-    IfCheckEffectUnitNum = false,
+    --是否自动触发
+    IfAutoAura = false,
+    --是否自动触发
+    IfStartCooldownWhenActive = false,
     --总是显示时间
     IfAlwaysShowTime = false,
     --总是显示层数
@@ -24,17 +16,12 @@
     --光环高亮剩余时间
     AuraGlowTimeLeft = 9999,
     --光环发光层数或人数
-    AuraGlowStackOrNum = 0,
-    --技能高亮层数
-    SpellGlowStack = 9999
+    AuraGlowStackOrNum = 0
 }]]
 
 aura_env.CFG = {
     --刷新周期
     RefreshSample = 0.1,
-
-    CheckUnitMaxNum = 40,
-    CheckAuraMaxNum = 40,
     --某些buff不能通过GetPlayerAuraBySpellID获取
     SpecialAuraIDList = {
         455366 --锯齿骨刺
@@ -42,7 +29,6 @@ aura_env.CFG = {
 }
 
 aura_env.gcd = {cd = 0, duration = 0}
-aura_env.spell = {duration = 0, cd = 0, charge_duration = 0, charge_cd = 0, stack = 0, max_stack = 0}
 aura_env.aura = {duration = 0, time = 0, stack = 0, effect_unit_num = 0, time_start = 0}
 aura_env.time = 0
 aura_env.pre_refresh_time = 0
@@ -64,46 +50,6 @@ aura_env.UpdateGCD = function()
     if duration > 0 then aura_env.gcd.duration = duration end
     aura_env.gcd.cd = start + duration - aura_env.time
     if aura_env.gcd.cd < 0 then aura_env.gcd.cd = 0 end
-end
-
---更新技能信息
-aura_env.UpdateSpell = function()   
-    local cd_info = C_Spell.GetSpellCooldown(aura_env.config.SpellName)     
-    local start, duration
-    if cd_info then
-        start = cd_info.startTime
-        duration = cd_info.duration   
-        if duration == 0 then duration = GetSpellBaseCooldown(aura_env.config.SpellName) * 0.001 end            
-    else
-        start = 0
-        duration = 0
-    end
-    local cd = 0
-    local charge_info = C_Spell.GetSpellCharges(aura_env.config.SpellName)
-    local stack, max_stack, charge_start, charge_duration, charge_cd
-    if charge_info then
-        stack = charge_info.currentCharges
-        max_stack = charge_info.maxCharges
-        charge_start = charge_info.cooldownStartTime
-        charge_duration = charge_info.cooldownDuration
-        charge_cd = charge_start + charge_duration - aura_env.time
-        if charge_cd < 0 then charge_cd = 0 end
-        if stack == 0 then cd = charge_cd end
-    else
-        cd = start + duration - aura_env.time
-        if cd < 0 or cd == aura_env.gcd.cd then cd = 0 end
-        if cd == 0 then stack = 1 else stack = 0 end
-        charge_start = start
-        charge_duration = duration
-        charge_cd = cd    
-        max_stack = 1
-    end
-    aura_env.spell.duration = duration
-    aura_env.spell.cd = cd
-    aura_env.spell.charge_duration = charge_duration
-    aura_env.spell.charge_cd = charge_cd
-    aura_env.spell.stack = stack
-    aura_env.spell.max_stack = max_stack
 end
 
 --更新光环信息
@@ -183,32 +129,6 @@ aura_env.UpdateAura = function()
         end
     end
     if stack == nil then if time > 0 then stack = 1 else stack = 0 end end
-
-    --检测影响单位数量
-    if aura_env.config.IfCheckEffectUnitNum then 
-        if not aura_env.config.IfHelpfulAura then
-            effect_unit_num = 0
-        end
-
-        for j = 1, aura_env.CFG.CheckUnitMaxNum do
-            local unit = "nameplate" .. j        
-            for k = 1, aura_env.CFG.CheckAuraMaxNum do
-                local unit_aura_info
-                if aura_env.config.IfHelpfulAura then
-                    unit_aura_info = C_UnitAuras.GetAuraDataByIndex(unit, k, "HELPFUL|PLAYER")
-                else
-                    unit_aura_info = C_UnitAuras.GetAuraDataByIndex(unit, k, "HARMFUL|PLAYER")
-                end        
-                if not unit_aura_info then
-                    break
-                end
-                if unit_aura_info.name == aura_env.config.AuraName or unit_aura_info.spellId.."" == aura_env.config.AuraName then
-                    effect_unit_num = effect_unit_num + 1
-                    break
-                end
-            end    
-        end
-    end
     
     --是否要提速
     if aura_env.config.AuraMaxDuration > 0 and duration ~= 0 then

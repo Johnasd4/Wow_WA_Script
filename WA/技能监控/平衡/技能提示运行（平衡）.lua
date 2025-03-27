@@ -16,7 +16,6 @@ function(_allstates, event, ...)
     end
 
     if event == "FRAME_UPDATE" then
-        
         --更新时间
         aura_env.time = GetTime()
         

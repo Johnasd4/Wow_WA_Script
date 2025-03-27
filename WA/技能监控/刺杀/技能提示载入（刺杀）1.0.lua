@@ -15,8 +15,9 @@ aura_env.CFG = {
         {Name = "死亡印记", KeyHint = "C3", ID = 360194, HaveGcd = true},
         {Name = "切割", KeyHint = "C5", ID = 315496, HaveGcd = true},
         {Name = "消失", KeyHint = "E", ID = 1856, HaveGcd = false},
+        {Name = "影遁", KeyHint = "Q", ID = 58984, HaveGcd = false},
         {Name = "潜行", KeyHint = "R", ID = 1784, HaveGcd = false},
-        {Name = "菊花茶", KeyHint = "F", ID = 381623, HaveGcd = false}
+        {Name = "菊花茶", KeyHint = "F", ID = 381623, HaveGcd = false},
     },
 
     --需要更新的光环名字和id
@@ -365,6 +366,8 @@ aura_env.UpdateSpell = function()
         end
         cd_raw = start + duration - aura_env.time
         if cd_raw < 0 then cd_raw = 0 end
+        if SpellInfo.HaveGcd and duration < aura_env.gcd.duration then duration = aura_env.gcd.duration end
+        if SpellInfo.HaveGcd and cd_raw < aura_env.gcd.cd then cd_raw = aura_env.gcd.cd end
         if SpellInfo.HaveGcd or aura_env.gcd.casting_spell then cd = cd_raw - aura_env.gcd.cd else cd = cd_raw end
         if cd < 0 then cd = 0 end
 
@@ -537,7 +540,7 @@ aura_env.UpdateAura = function()
                         else
                             unit_aura_info = C_UnitAuras.GetAuraDataByIndex(unit, k, "HARMFUL|PLAYER")                        
                         end
-                  
+                
                         if not unit_aura_info then
                             break
                         end
@@ -644,7 +647,6 @@ end
 
 --更新目标信息
 aura_env.UpdateTargetInfo = function()
-    --侧袭天赋，目标血量低于35%时，爆发能量固定为100
     aura_env.target.health = UnitHealth("target")
     aura_env.target.health_max = UnitHealthMax("target") 
     if aura_env.target.health_max > 0 then
@@ -810,9 +812,6 @@ aura_env.UpdateStatus = function()
         aura_env.aura["徘徊黑暗"].time = aura_env.aura["死亡印记"].time + 30
     end
 
-    --爆发中：毒刃buff > 0 | 君王之灾buff > 0 | 死亡印记buff > 0
-    aura_env.burst.mode = aura_env.aura["毒刃"].time > 0 or aura_env.aura["君王之灾"].time > 0 or aura_env.aura["死亡印记"].time > 0
-
     --申斥回响连击点
     aura_env.status.combo_points_shen_chi_hui_xiang = false
     aura_env.status.combo_points_shen_chi_hui_xiang_3 = false
@@ -834,10 +833,13 @@ end
 
 --更新爆发信息
 aura_env.UpdateBurstInfo = function()
+    --爆发中：毒刃buff > 0 | 君王之灾buff > 0 | 死亡印记buff > 0
+    aura_env.burst.mode = aura_env.aura["毒刃"].time > 0 or aura_env.aura["君王之灾"].time > 0 or aura_env.aura["死亡印记"].time > 0
+
     --死亡猎手版本
     if aura_env.aura["死亡猎手标记"].time > 0 or aura_env.aura["至黑之夜"].time > 0 then
         --徘徊毒刃
-        if aura_env.aura["徘徊黑暗"].time > 0 and aura_env.aura["徘徊黑暗"].time < 30 and aura_env.spell["毒刃"].cd < aura_env.aura["徘徊黑暗"].time - 9 then
+        if aura_env.aura["徘徊黑暗"].time > 0 and aura_env.aura["徘徊黑暗"].time < 30 and aura_env.spell["毒刃"].cd <= aura_env.aura["徘徊黑暗"].time - 9 then
             aura_env.burst.cd = aura_env.spell["毒刃"].cd
             aura_env.burst.time = 9
             if aura_env.enemy.num_in_range_10 <= 1 then
@@ -848,7 +850,7 @@ aura_env.UpdateBurstInfo = function()
             else
                 aura_env.burst.energy = 100
             end
-            aura_env.burst.prepare_time = 8
+            aura_env.burst.prepare_time = 12
         --单毒刃（超过君王15秒）
         elseif (not aura_env.talent["轻巧毒刃"]) and aura_env.spell["君王之灾"].cd > aura_env.spell["毒刃"].cd + 15 - 7 then
             aura_env.burst.cd = aura_env.spell["毒刃"].cd
@@ -859,7 +861,10 @@ aura_env.UpdateBurstInfo = function()
         elseif aura_env.spell["死亡印记"].cd > aura_env.spell["君王之灾"].cd + 15 - 5 then            
             --双毒刃
             if aura_env.talent["轻巧毒刃"] then
-                local du_ren_cd = 30 - aura_env.spell["毒刃"].stack * 1 + aura_env.spell["毒刃"].charge_cd
+                local du_ren_cd = 0
+                if aura_env.spell["毒刃"].stack < 2 then
+                    du_ren_cd = 30 - aura_env.spell["毒刃"].stack * 30 + aura_env.spell["毒刃"].charge_cd
+                end
                 --单毒刃：毒刃cd超过君王15秒
                 if du_ren_cd > aura_env.spell["君王之灾"].cd + 15 + 7 then
                     if aura_env.spell["毒刃"].cd > aura_env.spell["君王之灾"].cd + 7 then
@@ -869,7 +874,7 @@ aura_env.UpdateBurstInfo = function()
                     end
                     aura_env.burst.time = 15
                     aura_env.burst.energy = 200
-                    aura_env.burst.prepare_time = 12   
+                    aura_env.burst.prepare_time = 15  
                 --双毒刃
                 else   
                     if du_ren_cd > aura_env.spell["君王之灾"].cd + 7 then
@@ -879,7 +884,7 @@ aura_env.UpdateBurstInfo = function()
                     end                    
                     aura_env.burst.time = 17
                     aura_env.burst.energy = 250
-                    aura_env.burst.prepare_time = 15                    
+                    aura_env.burst.prepare_time = 20                    
                 end
             --单毒刃
             else
@@ -890,7 +895,7 @@ aura_env.UpdateBurstInfo = function()
                 end
                 aura_env.burst.time = 15
                 aura_env.burst.energy = 200
-                aura_env.burst.prepare_time = 12                
+                aura_env.burst.prepare_time = 15                
             end
         --死印君王
         else
@@ -901,7 +906,10 @@ aura_env.UpdateBurstInfo = function()
             end
             --双毒刃（不等毒刃cd）
             if aura_env.talent["轻巧毒刃"] then
-                local du_ren_cd = 30 - aura_env.spell["毒刃"].stack * 1 + aura_env.spell["毒刃"].charge_cd
+                local du_ren_cd = 0
+                if aura_env.spell["毒刃"].stack < 2 then
+                    du_ren_cd = 30 - aura_env.spell["毒刃"].stack * 30 + aura_env.spell["毒刃"].charge_cd
+                end
                 --单毒刃
                 if du_ren_cd > aura_env.burst.cd + 14 then
                     if aura_env.spell["毒刃"].cd > aura_env.burst.cd + 14 then
@@ -918,7 +926,7 @@ aura_env.UpdateBurstInfo = function()
                 end           
             end
             aura_env.burst.time = 19
-            aura_env.burst.energy = 150
+            aura_env.burst.energy = 100
             aura_env.burst.prepare_time = 12   
         end
     --普通版本
@@ -933,7 +941,10 @@ aura_env.UpdateBurstInfo = function()
         elseif aura_env.spell["死亡印记"].cd > aura_env.spell["君王之灾"].cd + 15 - 2 then            
             --双毒刃
             if aura_env.talent["轻巧毒刃"] then
-                local du_ren_cd = 30 - aura_env.spell["毒刃"].stack * 1 + aura_env.spell["毒刃"].charge_cd
+                local du_ren_cd = 0
+                if aura_env.spell["毒刃"].stack < 2 then
+                    du_ren_cd = 30 - aura_env.spell["毒刃"].stack * 30 + aura_env.spell["毒刃"].charge_cd
+                end
                 --单毒刃：毒刃cd超过君王15秒
                 if du_ren_cd > aura_env.spell["君王之灾"].cd + 15 + 7 then
                     if aura_env.spell["毒刃"].cd > aura_env.spell["君王之灾"].cd + 7 then
@@ -964,7 +975,7 @@ aura_env.UpdateBurstInfo = function()
                 end
                 aura_env.burst.time = 15
                 aura_env.burst.energy = 200
-                aura_env.burst.prepare_time = 12                
+                aura_env.burst.prepare_time = 8                
             end
         --死印君王
         else
@@ -975,7 +986,10 @@ aura_env.UpdateBurstInfo = function()
             end
             --双毒刃（不等毒刃cd）
             if aura_env.talent["轻巧毒刃"] then
-                local du_ren_cd = 30 - aura_env.spell["毒刃"].stack * 1 + aura_env.spell["毒刃"].charge_cd
+                local du_ren_cd = 0
+                if aura_env.spell["毒刃"].stack < 2 then
+                    du_ren_cd = 30 - aura_env.spell["毒刃"].stack * 30 + aura_env.spell["毒刃"].charge_cd
+                end
                 --单毒刃
                 if du_ren_cd > aura_env.burst.cd + 9 then
                     if aura_env.spell["毒刃"].cd > aura_env.burst.cd + 9 then
@@ -993,7 +1007,7 @@ aura_env.UpdateBurstInfo = function()
             end
             aura_env.burst.time = 17
             aura_env.burst.energy = 100
-            aura_env.burst.prepare_time = 12   
+            aura_env.burst.prepare_time = 8   
         end
     end
 end   
@@ -1001,17 +1015,54 @@ end
 --特殊技能显示判断
 aura_env.SpecialSpellDisplay = function()
     local region
-    --消失
-    region = WeakAuras.GetRegion("技能提示：刺杀—消失")
-    --不显示：强化锁喉buff > 0 | 锁喉cd > 0 | 至黑之夜buff > 0
-    if aura_env.aura["强化锁喉"].time > 0 or aura_env.aura["强化锁喉-潜行"].time > 0 or aura_env.spell["锁喉"].cd > 0 or aura_env.aura["至黑之夜"].time > 0 then
-        region:Hide()
-    --显示：消失cd = 0，10码内敌人 >= 3，锁喉buff人数 <= 10码内敌人 - 3，战斗中，非爆发中
-    elseif aura_env.spell["消失"].cd == 0 and aura_env.enemy.num_in_range_10 >= 3 and aura_env.aura["锁喉"].effect_unit_num <= aura_env.enemy.num_in_range_10 - 3 and aura_env.in_combat and (not aura_env.burst.mode) then
-        region:Show()
+    --影遁和消失2选1
+    local if_show = false
+
+    --显示：死亡猎手标记天赋，战斗中，潜行buff = 0，诡诈buff = 0，至黑之夜buff = 0，死亡猎手标记buff = 0
+    if aura_env.talent["死亡猎手标记"] and aura_env.in_combat and aura_env.aura["潜行"].time == 0 and aura_env.aura["诡诈"].time == 0 and aura_env.aura["至黑之夜"].time == 0 and aura_env.aura["死亡猎手标记"].time == 0 then
+        if_show = true    
+    --不显示：强化锁喉buff > 0 | 锁喉cd > 0
+    elseif aura_env.aura["强化锁喉"].time > 0 or aura_env.aura["强化锁喉-潜行"].time > 0 or aura_env.spell["锁喉"].cd > 0 or (not aura_env.talent["连环屠戮"]) then
+        if_show = false
+    --显示：10码内敌人 >= 3，锁喉buff人数 <= 10码内敌人 - 3，战斗中，非爆发中
+    elseif aura_env.enemy.num_in_range_10 >= 3 and aura_env.aura["锁喉"].effect_unit_num <= aura_env.enemy.num_in_range_10 - 3 and aura_env.in_combat and (not aura_env.burst.mode) then
+        if_show = true
+    --显示：10码内敌人 >= 3，（（割裂buff人数 < 10码总人数，割裂buff人数 < 5） | 割裂buff人数 <= 10码总人数 - 3），连击点 >= 5，战斗中，非爆发中
+    elseif aura_env.enemy.num_in_range_10 >= 3 and ((aura_env.aura["割裂"].effect_unit_num < 5 and aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10) or aura_env.aura["割裂"].effect_unit_num <= aura_env.enemy.num_in_range_10 - 3) and aura_env.resource.combo_points >= 5 and aura_env.in_combat and (not aura_env.burst.mode) then
+        if_show = true
     --不显示
     else    
-        region:Hide()
+        if_show = false
+    end
+
+    --不显示
+    if if_show == false then
+        WeakAuras.GetRegion("技能提示：刺杀—影遁"):Hide()
+        WeakAuras.GetRegion("技能提示：刺杀—消失"):Hide()
+    else
+        --影遁
+        if aura_env.spell["影遁"].cd == 0 and (not IsEncounterInProgress()) then
+            if aura_env.talent["死亡猎手标记"] and aura_env.aura["死亡猎手标记"].stack > 0 then
+                WeakAuras.GetRegion("技能提示：刺杀—影遁"):Hide()
+                WeakAuras.GetRegion("技能提示：刺杀—消失"):Hide()    
+            else
+                WeakAuras.GetRegion("技能提示：刺杀—影遁"):Show()
+                WeakAuras.GetRegion("技能提示：刺杀—消失"):Hide()
+            end            
+        --消失
+        elseif aura_env.spell["消失"].cd == 0 then
+            if aura_env.talent["死亡猎手标记"] and aura_env.aura["死亡猎手标记"].stack < 2 then
+                WeakAuras.GetRegion("技能提示：刺杀—影遁"):Hide()
+                WeakAuras.GetRegion("技能提示：刺杀—消失"):Hide()    
+            else
+                WeakAuras.GetRegion("技能提示：刺杀—影遁"):Hide()
+                WeakAuras.GetRegion("技能提示：刺杀—消失"):Show()
+            end
+        --不显示
+        else
+            WeakAuras.GetRegion("技能提示：刺杀—影遁"):Hide()
+            WeakAuras.GetRegion("技能提示：刺杀—消失"):Hide()
+        end
     end
 end
 
@@ -1024,15 +1075,11 @@ end
 --阶段6：战斗收尾
 aura_env.CalculateStageID = function()
     local stage_id
-    --阶段1：潜行 | 非潜行，非战斗状态 | 非战斗状态，消失，敌方单位数量 = 0
-    if 
-        aura_env.aura["潜行"].time > 0 or 
-        (not (aura_env.aura["潜行"].time > 0 or aura_env.in_combat)) or
-        ((not aura_env.in_combat) and aura_env.aura["消失"].time > 0 and aura_env.enemy.num_in_range_10 == 0)
-    then
+    --阶段1：（潜行buff > 0，消失buff = 0）|（非战斗状态，消失buff = 0）
+    if (aura_env.aura["潜行"].time > 0 and aura_env.aura["消失"].time == 0) or (aura_env.in_combat == false and aura_env.aura["消失"].time == 0) then
         stage_id = 1
     --阶段2：潜行及出潜后6秒（强化锁喉buff > 0.3）    
-    elseif aura_env.aura["强化锁喉"].time > 0.3 then
+    elseif aura_env.aura["潜行"].time > 0 or aura_env.aura["强化锁喉"].time > 0.3 then
         stage_id = 2
     --阶段5：爆发中
     elseif aura_env.burst.mode then
@@ -1068,7 +1115,7 @@ end
 --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
 --循环41：（死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋
 --循环40：爆发前戏
---循环53：（单君王 | 单毒刃）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，死亡印记cd > 0，死亡印记buff = 0，（（0 < 徘徊黑暗buff < 16，毒刃buff > 0）| 黑暗徘徊buff = 0）  
+--循环53：（单君王 | 单毒刃）爆发，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 0，死亡印记buff = 0，黑暗徘徊buff <= 20
 --循环52：（消失死印君王）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋         
 --循环51：（死印君王）爆发，(死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋    
 --循环50：爆发
@@ -1121,9 +1168,9 @@ aura_env.CalculateLoopID = function()
             --循环43：（双毒刃君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 爆发cd
             elseif aura_env.spell["死亡印记"].cd > aura_env.burst.cd then
                 loop_id = 43
-            --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
-            elseif aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) and aura_env.spell["消失"].cd <= aura_env.burst.cd + 6 then
-                loop_id = 42                
+            -- --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
+            -- elseif aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) and aura_env.spell["消失"].cd <= aura_env.burst.cd + 6 then
+            --     loop_id = 42                
             --循环41：（死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋
             elseif aura_env.talent["徘徊黑暗"] then
                 loop_id = 41
@@ -1138,12 +1185,12 @@ aura_env.CalculateLoopID = function()
     --阶段5：爆发
     elseif aura_env.stage_id == 5 then
         if aura_env.aura["死亡猎手标记"].time > 0 or aura_env.aura["至黑之夜"].time > 0 then        
-            --循环53：（单君王 | 单毒刃）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，死亡印记cd > 0，死亡印记buff = 0，（（0 < 徘徊黑暗buff < 16，毒刃buff > 0）| 黑暗徘徊buff = 0）         
-            if aura_env.spell["死亡印记"].cd > 0 and aura_env.aura["死亡印记"].time == 0 and ((aura_env.aura["徘徊黑暗"].time > 0 and aura_env.aura["徘徊黑暗"].time < 16 and aura_env.aura["毒刃"].time > 0) or aura_env.aura["徘徊黑暗"].time == 0) then
+            --循环53：（单君王 | 单毒刃）爆发，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 0，死亡印记buff = 0，黑暗徘徊buff <= 20
+            if aura_env.spell["死亡印记"].cd > 0 and aura_env.aura["死亡印记"].time == 0 and aura_env.aura["徘徊黑暗"].time <= 20 then
                 loop_id = 53          
-            --循环52：（消失死印君王）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋            
-            elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) then
-                loop_id = 52
+            -- --循环52：（消失死印君王）爆发，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋            
+            -- elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) then
+            --     loop_id = 52
             --循环51：（死印君王）爆发，(死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋
             elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] then
                 loop_id = 51 
@@ -1178,7 +1225,7 @@ end
 --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
 --循环41：（死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋
 --循环40：爆发前戏
---循环53：（单君王 | 单毒刃）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，死亡印记cd > 0，死亡印记buff = 0，（（0 < 徘徊黑暗buff < 16，毒刃buff > 0）| 黑暗徘徊buff = 0）  
+--循环53：（单君王 | 单毒刃）爆发，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 0，死亡印记buff = 0，黑暗徘徊buff <= 20
 --循环52：（消失死印君王）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋         
 --循环51：（死印君王）爆发，(死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋    
 --循环50：爆发
@@ -1209,7 +1256,7 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
             --循环21：死亡猎手标记天赋
             elseif aura_env.talent["死亡猎手标记"] then
                 aura_env.loop_id = 21         
-            --循环20：潜行及出潜后6秒（强化锁喉buff > 0）1
+            --循环20：潜行及出潜后6秒（强化锁喉buff > 0）
             else
                 aura_env.loop_id = 20
             end
@@ -1221,27 +1268,21 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --切割：切割buff = 0，连击点 > 0，10码总人数 <= 1         
         if aura_env.aura["切割"].time == 0 and aura_env.resource.combo_points > 0 and aura_env.enemy.num_in_range_10 <= 1 then
             next_spell.name = "切割"                 
-        --锁喉：诡诈天赋，锁喉cd = 0，（锁喉buff <= 6 | 非强化锁喉），死亡猎手标记buff = 0，至黑之夜buff <= 3，连击点 <= 1
-        elseif aura_env.spell["锁喉"].cd == 0 and (aura_env.aura["锁喉"].time <= 6 or (not aura_env.aura["锁喉"].super)) and aura_env.talent["诡诈"] and aura_env.aura["死亡猎手标记"].time == 0 and aura_env.aura["至黑之夜"].time <= 3 and aura_env.resource.combo_points <= 1 then
-            next_spell.name = "锁喉"         
-        --伏击：非诡诈天赋，强化锁喉（潜行）buff > 0，死亡猎手标记buff = 0，至黑之夜buff <= 3
-        elseif (not aura_env.talent["诡诈"]) and aura_env.aura["强化锁喉-潜行"].time > 0 and aura_env.aura["死亡猎手标记"].time == 0 and aura_env.aura["至黑之夜"].time <= 3 then
+        --伏击：非诡诈天赋，潜行buff > 0，死亡猎手标记buff = 0，至黑之夜buff <= 强化锁喉buff + 6
+        elseif (not aura_env.talent["诡诈"]) and aura_env.aura["潜行"].time > 0 and aura_env.aura["死亡猎手标记"].time == 0 and aura_env.aura["至黑之夜"].time <= aura_env.aura["强化锁喉"].time + 6 then
             next_spell.name = "伏击" 
-        --伏击：（强化锁喉（潜行）buff > 0 | 诡诈buff > 0），死亡猎手标记buff = 0，至黑之夜buff <= 3，连击点 <= 5
-        elseif (aura_env.aura["强化锁喉-潜行"].time > 0 or aura_env.aura["诡诈"].time > 0) and aura_env.aura["死亡猎手标记"].time == 0 and aura_env.aura["至黑之夜"].time <= 3 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "伏击"            
+        --毁伤：至黑之夜buff > 0，割裂buff > 0，腐蚀飞溅buff = 0，强化锁喉buff > 4.3
+        elseif aura_env.aura["至黑之夜"].time > 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["强化锁喉"].time > 4.3 then
+            next_spell.name = "毁伤" 
+        --毒伤：至黑之夜buff > 0, 腐蚀飞溅buff > 0，强化锁喉buff > 3.3，连击点 = 7
+        elseif aura_env.aura["至黑之夜"].time > 0 and aura_env.aura["腐蚀飞溅"].time > 0 and aura_env.aura["强化锁喉"].time > 3.3 and aura_env.resource.combo_points == 7 then
+            next_spell.name = "毒伤"    
         --锁喉：锁喉cd = 0，（锁喉buff = 0 | 非强化锁喉），连击点 < 5
         elseif aura_env.spell["锁喉"].cd == 0 and (aura_env.aura["锁喉"].time <= 6 or (not aura_env.aura["锁喉"].super)) and aura_env.resource.combo_points < 5 then
-            next_spell.name = "锁喉"    
-        --锁喉：锁喉cd = 0，锁喉buff人数 < 10码总人数，至黑之夜buff <= 强化锁喉buff + 6，连击点 < 7
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.aura["至黑之夜"].time <= aura_env.aura["强化锁喉"].time + 6 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "锁喉"                
-        --伏击：死亡猎手标记buff = 0，至黑之夜buff <= 强化锁喉buff + 6，连击点 < 7
-        elseif aura_env.aura["死亡猎手标记"].time == 0 and aura_env.aura["至黑之夜"].time <= aura_env.aura["强化锁喉"].time + 6 and aura_env.resource.combo_points < 7 then
-            next_spell.name = "伏击"     
-        --毒伤：死亡猎手标记buff = 0，至黑之夜buff <= 强化锁喉buff + 6，连击点 = 7
-        elseif aura_env.aura["死亡猎手标记"].time == 0 and aura_env.aura["至黑之夜"].time <= aura_env.aura["强化锁喉"].time + 6 and aura_env.resource.combo_points == 7 then
-            next_spell.name = "毒伤"    
+            next_spell.name = "锁喉"            
+        --伏击：（潜行buff > 0 | 诡诈buff > 0），死亡猎手标记buff = 0，至黑之夜buff <= 强化锁喉buff + 6，连击点 < 5
+        elseif (aura_env.aura["潜行"].time > 0 or aura_env.aura["诡诈"].time > 0) and aura_env.aura["死亡猎手标记"].time == 0 and aura_env.aura["至黑之夜"].time <= aura_env.aura["强化锁喉"].time + 6 and aura_env.resource.combo_points < 5 then
+            next_spell.name = "伏击"            
         --锁喉：锁喉cd = 0，锁喉buff人数 < 10码总人数，连击点 < 5
         elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.resource.combo_points < 5 then
             next_spell.name = "锁喉"             
@@ -1257,20 +1298,20 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --锁喉：锁喉cd = 0，锁喉buff最小时间 <= 18，0 < 强化锁喉buff <= 10码总人数 / 3 + 2，2 <= 连击点 < 5
         elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_min_time <= 18 and aura_env.aura["强化锁喉"].time < math.ceil(aura_env.enemy.num_in_range_10 * 0.33) + 2 and aura_env.resource.combo_points >= 2 and aura_env.resource.combo_points < 5 then
             next_spell.name = "锁喉"                                       
-        --割裂：（割裂buff人数 < 10码总人数 | 割裂buff最小时间 <= 12），连击点 >= 5              
-        elseif (aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 or aura_env.aura["割裂"].effect_min_time <= 12) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
+        --割裂：（（割裂buff人数 < 10码总人数，割裂buff人数 < 5） | 割裂buff人数 <= 10码总人数 - 3 | 割裂buff最小时间 <= 12），连击点 >= 5              
+        elseif ((aura_env.aura["割裂"].effect_unit_num < 5 and aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10) or aura_env.aura["割裂"].effect_unit_num <= aura_env.enemy.num_in_range_10 - 3 or aura_env.aura["割裂"].effect_min_time <= 12) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"                      
         --循环切换
         else
             --阶段5：爆发
             if aura_env.burst.mode then
                 if aura_env.aura["死亡猎手标记"].time > 0 or aura_env.aura["至黑之夜"].time > 0 then        
-                    --循环53：（单君王 | 单毒刃）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，死亡印记cd > 0，死亡印记buff = 0，（（0 < 徘徊黑暗buff < 16，毒刃buff > 0）| 黑暗徘徊buff = 0）         
-                    if aura_env.spell["死亡印记"].cd > 0 and aura_env.aura["死亡印记"].time == 0 and ((aura_env.aura["徘徊黑暗"].time > 0 and aura_env.aura["徘徊黑暗"].time < 16 and aura_env.aura["毒刃"].time > 0) or aura_env.aura["徘徊黑暗"].time == 0) then
-                        aura_env.loop_id = 53          
-                    --循环52：（消失死印君王）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋            
-                    elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) then
-                        aura_env.loop_id = 52
+                    --循环53：（单君王 | 单毒刃）爆发，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 0，死亡印记buff = 0，黑暗徘徊buff <= 20
+                    if aura_env.spell["死亡印记"].cd > 0 and aura_env.aura["死亡印记"].time == 0 and aura_env.aura["徘徊黑暗"].time <= 20 then
+                        aura_env.loop_id = 53                     
+                    -- --循环52：（消失死印君王）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋            
+                    -- elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) then
+                    --     aura_env.loop_id = 52
                     --循环51：（死印君王）爆发，(死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋
                     elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] then
                         aura_env.loop_id = 51 
@@ -1313,9 +1354,9 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
                     --循环43：（双毒刃君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 爆发cd
                     elseif aura_env.spell["死亡印记"].cd > aura_env.burst.cd then
                         aura_env.loop_id = 43
-                    --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
-                    elseif aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) and aura_env.spell["消失"].cd <= aura_env.burst.cd + 6 then
-                        aura_env.loop_id = 42                
+                    -- --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
+                    -- elseif aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) and aura_env.spell["消失"].cd <= aura_env.burst.cd + 6 then
+                    --     aura_env.loop_id = 42                
                     --循环41：（死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋
                     elseif aura_env.talent["徘徊黑暗"] then
                         aura_env.loop_id = 41
@@ -1346,8 +1387,8 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         end                
     --循环21：死亡猎手标记天赋
     elseif aura_env.loop_id == 21 then
-        --伏击：（强化锁喉（潜行）buff > 0 | 诡诈buff > 0），死亡猎手标记buff = 0
-        if (aura_env.aura["强化锁喉-潜行"].time > 0 or aura_env.aura["诡诈"].time > 0) and aura_env.aura["死亡猎手标记"].time == 0 then
+        --伏击：诡诈buff > 0 | 潜行buff > 0），死亡猎手标记buff = 0，至黑之夜buff = 0
+        if (aura_env.aura["诡诈"].time > 0 or aura_env.aura["潜行"].time > 0) and aura_env.aura["死亡猎手标记"].time == 0 and aura_env.aura["至黑之夜"].time == 0 then
             next_spell.name = "伏击"        
         --申斥回响（起手专用）：申斥回响天赋，申斥回响cd = 0，割裂buff = 0，消失cd = 0，连击点 <= 5，10码总人数 <= 1         
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.aura["割裂"].time == 0 and aura_env.spell["消失"].cd == 0 and aura_env.resource.combo_points <= 5 and aura_env.enemy.num_in_range_10 <= 1 then
@@ -1361,7 +1402,7 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --割裂（起手专用）：割裂buff = 0，消失cd == 0，（连击点 = 7 | 申斥回响5豆），10码总人数 <= 1         
         elseif aura_env.aura["割裂"].time == 0 and aura_env.spell["消失"].cd == 0 and (aura_env.status.combo_points_shen_chi_hui_xiang_5 or aura_env.resource.combo_points == 7) and aura_env.enemy.num_in_range_10 <= 1 then
             next_spell.name = "割裂"      
-        --切割：切割buff = 0，0 < 连击点 <= 2，10码总人数 <= 1         
+        --切割（起手专用）：切割buff = 0，0 < 连击点 <= 2，10码总人数 <= 1         
         elseif aura_env.aura["切割"].time == 0 and aura_env.resource.combo_points > 0 and aura_env.resource.combo_points <= 2 and aura_env.enemy.num_in_range_10 <= 1 then
             next_spell.name = "切割"              
         --锁喉：锁喉cd = 0，（锁喉buff <= 6，非强化锁喉），连击点 < 5
@@ -1390,12 +1431,12 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
             --阶段5：爆发
             if aura_env.burst.mode then
                 if aura_env.aura["死亡猎手标记"].time > 0 or aura_env.aura["至黑之夜"].time > 0 then        
-                    --循环53：（单君王 | 单毒刃）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，死亡印记cd > 0，死亡印记buff = 0，（（0 < 徘徊黑暗buff < 16，毒刃buff > 0）| 黑暗徘徊buff = 0）         
-                    if aura_env.spell["死亡印记"].cd > 0 and aura_env.aura["死亡印记"].time == 0 and ((aura_env.aura["徘徊黑暗"].time > 0 and aura_env.aura["徘徊黑暗"].time < 16 and aura_env.aura["毒刃"].time > 0) or aura_env.aura["徘徊黑暗"].time == 0) then
-                        aura_env.loop_id = 53          
-                    --循环52：（消失死印君王）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋            
-                    elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) then
-                        aura_env.loop_id = 52
+                    --循环53：（单君王 | 单毒刃）爆发，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 0，死亡印记buff = 0，黑暗徘徊buff <= 20
+                    if aura_env.spell["死亡印记"].cd > 0 and aura_env.aura["死亡印记"].time == 0 and aura_env.aura["徘徊黑暗"].time <= 20 then
+                        aura_env.loop_id = 53                
+                    -- --循环52：（消失死印君王）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋            
+                    -- elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) then
+                    --     aura_env.loop_id = 52
                     --循环51：（死印君王）爆发，(死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋
                     elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] then
                         aura_env.loop_id = 51 
@@ -1438,9 +1479,9 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
                     --循环43：（双毒刃君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 爆发cd
                     elseif aura_env.spell["死亡印记"].cd > aura_env.burst.cd then
                         aura_env.loop_id = 43
-                    --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
-                    elseif aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) and aura_env.spell["消失"].cd <= aura_env.burst.cd + 6 then
-                        aura_env.loop_id = 42                
+                    -- --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
+                    -- elseif aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) and aura_env.spell["消失"].cd <= aura_env.burst.cd + 6 then
+                    --     aura_env.loop_id = 42                
                     --循环41：（死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋
                     elseif aura_env.talent["徘徊黑暗"] then
                         aura_env.loop_id = 41
@@ -1497,12 +1538,12 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
             --阶段5：爆发
             if aura_env.burst.mode then
                 if aura_env.aura["死亡猎手标记"].time > 0 or aura_env.aura["至黑之夜"].time > 0 then        
-                    --循环53：（单君王 | 单毒刃）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，死亡印记cd > 0，死亡印记buff = 0，（（0 < 徘徊黑暗buff < 16，毒刃buff > 0）| 黑暗徘徊buff = 0）         
-                    if aura_env.spell["死亡印记"].cd > 0 and aura_env.aura["死亡印记"].time == 0 and ((aura_env.aura["徘徊黑暗"].time > 0 and aura_env.aura["徘徊黑暗"].time < 16 and aura_env.aura["毒刃"].time > 0) or aura_env.aura["徘徊黑暗"].time == 0) then
-                        aura_env.loop_id = 53          
-                    --循环52：（消失死印君王）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋            
-                    elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) then
-                        aura_env.loop_id = 52
+                    --循环53：（单君王 | 单毒刃）爆发，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 0，死亡印记buff = 0，黑暗徘徊buff <= 20
+                    if aura_env.spell["死亡印记"].cd > 0 and aura_env.aura["死亡印记"].time == 0 and aura_env.aura["徘徊黑暗"].time <= 20 then
+                        aura_env.loop_id = 53               
+                    -- --循环52：（消失死印君王）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋            
+                    -- elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) then
+                    --     aura_env.loop_id = 52
                     --循环51：（死印君王）爆发，(死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋
                     elseif (aura_env.spell["死亡印记"].cd == 0 or aura_env.aura["死亡印记"].time > 0 or aura_env.aura["徘徊黑暗"].time > 0) and aura_env.talent["徘徊黑暗"] then
                         aura_env.loop_id = 51 
@@ -1545,9 +1586,9 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
                     --循环43：（双毒刃君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 爆发cd
                     elseif aura_env.spell["死亡印记"].cd > aura_env.burst.cd then
                         aura_env.loop_id = 43
-                    --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
-                    elseif aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) and aura_env.spell["消失"].cd <= aura_env.burst.cd + 6 then
-                        aura_env.loop_id = 42                
+                    -- --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
+                    -- elseif aura_env.talent["徘徊黑暗"] and (not aura_env.talent["连环屠戮"]) and aura_env.spell["消失"].cd <= aura_env.burst.cd + 6 then
+                    --     aura_env.loop_id = 42                
                     --循环41：（死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋
                     elseif aura_env.talent["徘徊黑暗"] then
                         aura_env.loop_id = 41
@@ -1581,18 +1622,18 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --割裂：0 < 割裂buff < 1，连击点 > 0         
         if aura_env.aura["割裂"].time > 0 and aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
             next_spell.name = "割裂"           
-        --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        --锁喉：锁喉cd = 0，锁喉buff = 0，（非连环屠戮天赋 | 目标 <= 2），连击点 <= 6
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"                
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
         elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"           
+            next_spell.name = "毁伤"          
         --切割：切割buff = 0，割裂buff > 0，连击点 > 0           
         elseif aura_env.aura["切割"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.resource.combo_points > 0 then
             next_spell.name = "切割"                    
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"         
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                
         --申斥回响：申斥回响天赋，申斥回响cd = 0，连击点 <= 5
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points <= 5 then
             next_spell.name = "申斥回响"             
@@ -1600,7 +1641,7 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 7 then
             next_spell.name = "刀扇"                 
         --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 = 0，6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and (aura_env.resource.combo_points == 0 or aura_env.resource.combo_points == 6) then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and (aura_env.resource.combo_points == 0 or aura_env.resource.combo_points == 6) then
             next_spell.name = "锁喉"                
         --剧毒之刃：连击点 = 6，5 < 增效药膏buff层数 < 10，10码总人数 <= 1
         elseif aura_env.resource.combo_points == 6 and aura_env.aura["增效药膏"].stack > 5 and aura_env.aura["增效药膏"].stack < 10 and aura_env.enemy.num_in_range_10 <= 1 then
@@ -1616,18 +1657,20 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"  
             next_spell.type = 3                  
-        --毒伤：连击点 = 7
-        elseif aura_env.resource.combo_points == 7 then
+        --毒伤：连击点 = 7 | 申斥回响豆
+        elseif aura_env.resource.combo_points == 7 or aura_env.status.combo_points_shen_chi_hui_xiang then
             next_spell.name = "毒伤" 
-            --不等待：侧袭天赋，目标血量低于35%，能量 >= 100
-            if aura_env.talent["侧袭"] and aura_env.target.health_percent < 0.35 and aura_env.resource.energy >= 100 then
+            --不等待：侧袭天赋，目标血量低于35%，能量 >= 200
+            if aura_env.talent["侧袭"] and aura_env.target.health_percent < 0.35 and aura_env.resource.energy >= 195 then
                 next_spell.if_cast_now = true                  
             --不等待：能量 > 300 - 2 * 能量恢复速度
             elseif aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true                     
-            --等待：（毒伤buff >= 补偿时间 | 毒伤buff = 0 | 9 <= 增效药膏层数 < 10），锁喉buff > 6，割裂buff > 8，8 < 增效药膏层数 < 10，10码总人数 <= 1    
-            elseif (aura_env.aura["毒伤"].time >= aura_env.resource.combo_points * 0.3 or aura_env.aura["毒伤"].time == 0 or (aura_env.aura["增效药膏"].stack > 8 and aura_env.aura["增效药膏"].stack < 10)) and 
-                    aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.aura["增效药膏"].stack <= 18 and aura_env.enemy.num_in_range_10 <= 1 then
+                next_spell.if_cast_now = true      
+            --不等待：10码总人数 > 2
+            elseif aura_env.enemy.num_in_range_10 > 2 then
+                next_spell.if_cast_now = true
+            --等待：8 < 增效药膏层数 < 10，锁喉buff > 6，割裂buff > 8
+            elseif aura_env.aura["增效药膏"].stack > 8 and aura_env.aura["增效药膏"].stack < 10 and aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 then
                 next_spell.if_cast_now = false
             end         
         --技能类型1  
@@ -1639,12 +1682,12 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间
         if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time then
             aura_env.status.combo_points_shen_chi_hui_xiang = false
-        end                
+        end               
         --割裂：0 < 割裂buff < 1，连击点 > 0         
         if aura_env.aura["割裂"].time > 0 and aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
             next_spell.name = "割裂"        
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"         
         --割裂：割裂buff = 0，（连击点 ≥ 5 | 申斥回响豆）      
         elseif aura_env.aura["割裂"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
@@ -1659,10 +1702,13 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"              
         --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 = 0，4
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and (aura_env.resource.combo_points == 0 or aura_env.resource.combo_points == 4) then
-            next_spell.name = "锁喉"       
-        --割裂：（割裂buff <= 补偿时间，连击点 ≥ 5）|（割裂buff <= 补偿时间 | 申斥回响豆）
-        elseif (aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["割裂"].time <= 9.6 and aura_env.status.combo_points_shen_chi_hui_xiang) then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and (aura_env.resource.combo_points == 0 or aura_env.resource.combo_points == 4) then
+            next_spell.name = "锁喉"    
+        --割裂：（割裂buff <= 4）|（割裂buff <= 补偿时间 | 申斥回响豆）
+        elseif aura_env.aura["割裂"].time <= 4 and aura_env.resource.combo_points >= 5 then
+            next_spell.name = "割裂"                 
+        --割裂：(（割裂buff <= 补偿时间，连击点 ≥ 5）|（割裂buff <= 补偿时间 | 申斥回响豆）)，死亡猎手标记buff层数 >= 2
+        elseif ((aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["割裂"].time <= 10.5 and aura_env.status.combo_points_shen_chi_hui_xiang)) and aura_env.aura["死亡猎手标记"].stack >= 2 then
             next_spell.name = "割裂"     
         --猩红风暴：猩红风暴天赋，猩红风暴buff <= 5，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1         
         elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
@@ -1675,29 +1721,35 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"  
             next_spell.type = 3        
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
         elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "毁伤"   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"                   
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                
         --刀扇：见者尽灭buff > 0，连击点 < 5
         elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "刀扇"                           
         --毒伤：连击点 >= 5 | （申斥回响豆，能量 < 210）
         elseif aura_env.resource.combo_points >= 5 or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.resource.energy <= 210) then
             next_spell.name = "毒伤" 
-            --不等待：侧袭天赋，目标血量低于35%，能量 >= 100
-            if aura_env.talent["侧袭"] and aura_env.target.health_percent < 0.35 and aura_env.resource.energy >= 100 then
+            --不等待：侧袭天赋，目标血量低于35%，能量 >= 195
+            if aura_env.talent["侧袭"] and aura_env.target.health_percent < 0.35 and aura_env.resource.energy >= 195 then
                 next_spell.if_cast_now = true                  
+            --不等待：徘徊黑暗buff <= 能量 / 20
+            elseif aura_env.aura["徘徊黑暗"].time <= aura_env.resource.energy / 20 then
+                next_spell.if_cast_now = true     
             --不等待：能量 > 300 - 2 * 能量恢复速度
             elseif aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true          
-            --不等待：徘徊黑暗buff <= 能量 / 能量回复速度
-            elseif aura_env.aura["徘徊黑暗"].time <= aura_env.resource.energy / aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true     
-            --等待：（毒伤buff >= 补偿时间 | 毒伤buff = 0），锁喉buff > 6，割裂buff > 8，增效药膏层数 <= 18，10码总人数 <= 1
-            elseif (aura_env.aura["毒伤"].time >= aura_env.resource.combo_points * 0.3 or aura_env.aura["毒伤"].time == 0) and aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.aura["增效药膏"].stack <= 18 and aura_env.enemy.num_in_range_10 <= 1 then
+                next_spell.if_cast_now = true       
+            --不等待：10码总人数 > 2
+            elseif aura_env.enemy.num_in_range_10 > 2 then
+                next_spell.if_cast_now = true                
+            --等待：死亡猎手标记 == 3，10码总人数 <= 1
+            elseif aura_env.aura["死亡猎手标记"].stack == 3 and aura_env.enemy.num_in_range_10 <= 1 then
+                next_spell.if_cast_now = false                          
+            --等待：（毒伤buff >= 补偿时间 | 毒伤buff = 0），锁喉buff > 6，割裂buff > 8，增效药膏层数 <= 18
+            elseif (aura_env.aura["毒伤"].time >= aura_env.resource.combo_points * 0.3 or aura_env.aura["毒伤"].time == 0) and aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.aura["增效药膏"].stack <= 18 then
                 next_spell.if_cast_now = false
             end        
         --毁伤：侧袭buff > 0
@@ -1705,28 +1757,31 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
             next_spell.name = "毁伤" 
         else
             next_spell.type = 1
-            --不等待：侧袭天赋，目标血量低于35%，能量 >= 100
-            if aura_env.talent["侧袭"] and aura_env.target.health_percent < 0.35 and aura_env.resource.energy >= 100 then
-                next_spell.if_cast_now = true               
-            --不等待：能量 > 210 | 非红染之刃天赋
-            elseif aura_env.resource.energy > 210 or (not aura_env.talent["红染之刃"]) then
-                next_spell.if_cast_now = true
+            --不等待：侧袭天赋，目标血量低于35%，能量 >= 195
+            if aura_env.talent["侧袭"] and aura_env.target.health_percent < 0.35 and aura_env.resource.energy >= 210 then
+                next_spell.if_cast_now = true   
             --不等待：徘徊黑暗buff <= 能量 / 能量回复速度
             elseif aura_env.aura["徘徊黑暗"].time <= aura_env.resource.energy / aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true    
-            --等待：（毒伤buff >= 4 | 毒伤buff = 0），锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
+                next_spell.if_cast_now = true                    
+            --不等待：10码总人数 > 2
+            elseif aura_env.enemy.num_in_range_10 > 2 then
+                next_spell.if_cast_now = true                
+            --等待：能量 < 210 | 非红染之刃天赋
+            elseif aura_env.resource.energy > 210 or (not aura_env.talent["红染之刃"]) then
                 next_spell.if_cast_now = false
-            end
+            --等待：（毒伤buff >= 3 | 毒伤buff = 0），锁喉buff > 6，割裂buff > 8，增效药膏层数 <= 18
+            elseif (aura_env.aura["毒伤"].time >= 3 or aura_env.aura["毒伤"].time == 0) and aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.aura["增效药膏"].stack <= 18 then
+                next_spell.if_cast_now = false
+            end        
         end             
     --循环30：平稳    
     elseif aura_env.loop_id == 30 then
         --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间
         if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time then
             aura_env.status.combo_points_shen_chi_hui_xiang = false
-        end                        
+        end                       
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        if aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        if aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"         
         --割裂：割裂buff = 0，（连击点 ≥ 5 | 申斥回响豆）      
         elseif aura_env.aura["割裂"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
@@ -1741,7 +1796,7 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"              
         --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"       
         --割裂：（割裂buff <= 补偿时间，连击点 ≥ 5）|（割裂buff <= 补偿时间 | 申斥回响豆）
         elseif (aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["割裂"].time <= 9.6 and aura_env.status.combo_points_shen_chi_hui_xiang) then
@@ -1757,20 +1812,23 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"  
             next_spell.type = 3        
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
         elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "毁伤"   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"                                      
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                                           
         --毒伤：连击点 >= 5 | （申斥回响豆，能量 < 210）
         elseif aura_env.resource.combo_points >= 5 or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.resource.energy <= 210) then
             next_spell.name = "毒伤"  
             --不等待：能量 > 300 - 2 * 能量恢复速度
             if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
                 next_spell.if_cast_now = true
-            --等待：（毒伤buff >= 补偿时间 | 毒伤buff = 0），锁喉buff > 6，割裂buff > 8，增效药膏层数 <= 18，10码总人数 <= 1
-            elseif (aura_env.aura["毒伤"].time >= aura_env.resource.combo_points * 0.3 or aura_env.aura["毒伤"].time == 0) and aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.aura["增效药膏"].stack <= 18 and aura_env.enemy.num_in_range_10 <= 1 then
+            --不等待：10码总人数 > 2
+            elseif aura_env.enemy.num_in_range_10 > 2 then
+                next_spell.if_cast_now = true                         
+            --等待：（毒伤buff >= 补偿时间 | 毒伤buff = 0），锁喉buff > 6，割裂buff > 8，增效药膏层数 <= 18
+            elseif (aura_env.aura["毒伤"].time >= aura_env.resource.combo_points * 0.3 or aura_env.aura["毒伤"].time == 0) and aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.aura["增效药膏"].stack <= 18 then
                 next_spell.if_cast_now = false
             end        
         --毁伤：侧袭buff > 0
@@ -1778,25 +1836,15 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
             next_spell.name = "毁伤" 
         else
             next_spell.type = 1
-            --不等待：侧袭天赋，目标血量低于35%，能量 >= 100
-            if aura_env.talent["侧袭"] and aura_env.target.health_percent < 0.35 and aura_env.resource.energy >= 100 then
-                next_spell.if_cast_now = true                  
-            --不等待：能量 > 210 | 非红染之刃天赋
-            elseif aura_env.resource.energy > 210 or (not aura_env.talent["红染之刃"]) then
-                next_spell.if_cast_now = true
-            --等待：（毒伤buff >= 4 | 毒伤buff = 0），锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
-                next_spell.if_cast_now = false
-            end
         end    
     --循环46：（单毒刃君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），君王之灾cd = 爆发cd，死亡印记cd > 爆发cd
     elseif aura_env.loop_id == 46 then
-        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间
-        if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time then
+        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间，至黑之夜buff = 0
+        if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time and aura_env.aura["至黑之夜"].time == 0 then
             aura_env.status.combo_points_shen_chi_hui_xiang = false
         end        
-        --爆发：爆发cd = 0，死亡猎手标记buff层数 >= 2
-        if aura_env.burst.cd == 0 and aura_env.aura["切割"].time > 0 and aura_env.aura["死亡猎手标记"].stack >= 2 then
+        --爆发：爆发cd = 0，锁喉buff > 6，割裂buff > 8，切割buff > 0
+        if aura_env.burst.cd == 0 and aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.aura["切割"].time > 0 then
             if aura_env.resource.energy < aura_env.burst.energy then
                 next_spell.if_cast_now = false
             end                    
@@ -1806,13 +1854,13 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].time > 0 and aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
             next_spell.name = "割裂"     
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"         
         --割裂：割裂buff = 0，（连击点 ≥ 5 | 申斥回响豆）      
         elseif aura_env.aura["割裂"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"                    
-        --猩红风暴：猩红风暴天赋，猩红风暴buff  = 0，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1，10码总人数 - 猩红风暴buff人数 > 1      
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
+        --猩红风暴：猩红风暴天赋，猩红风暴buff = 0，至黑之夜buff = 0，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1，10码总人数 - 猩红风暴buff人数 > 1      
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
             next_spell.name = "猩红风暴"  
         --切割：切割buff = 0，割裂buff > 0，连击点 > 0           
         elseif aura_env.aura["切割"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.resource.combo_points > 0 then
@@ -1821,13 +1869,16 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"              
         --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"       
-        --割裂：割裂buff <= 补偿时间，（连击点 ≥ 5 | 申斥回响豆）
-        elseif aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
+        --割裂：（割裂buff <= 4）|（割裂buff <= 补偿时间 | 申斥回响豆）
+        elseif aura_env.aura["割裂"].time <= 4 and aura_env.resource.combo_points >= 5 then
+            next_spell.name = "割裂"                 
+        --割裂：(（割裂buff <= 补偿时间，连击点 ≥ 5）|（割裂buff <= 补偿时间 | 申斥回响豆）)，死亡猎手标记buff层数 >= 2
+        elseif ((aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["割裂"].time <= 10.5 and aura_env.status.combo_points_shen_chi_hui_xiang)) and aura_env.aura["死亡猎手标记"].stack >= 2 then
             next_spell.name = "割裂"     
         --猩红风暴：猩红风暴天赋，猩红风暴buff  <= 5，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1         
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "猩红风暴"          
         --锁喉（技能类型3）：锁喉buff人数 < 10码内敌人，10码内敌人 <= 2，连击点 <= 6
         elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 2 and aura_env.resource.combo_points <= 6 then
@@ -1837,36 +1888,30 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"  
             next_spell.type = 3    
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
         elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "毁伤"   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"                   
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                              
         --刀扇：见者尽灭buff > 0，连击点 < 5
         elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "刀扇"   
-        --锁喉：爆发cd < 5，锁喉buff <= 爆发cd + 9，非强化锁喉
-        elseif aura_env.burst.cd < 5 and aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= aura_env.burst.cd + 9 and (not aura_env.aura["锁喉"].super) then
-            next_spell.name = "锁喉"            
-        --割裂：爆发cd < 5，割裂buff <= 爆发cd + 12
-        elseif aura_env.burst.cd < 5 and aura_env.aura["割裂"].time <= aura_env.burst.cd + 12 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
-            next_spell.name = "割裂"                               
+            next_spell.name = "刀扇"                                  
         --毒伤：(至黑之夜buff = 0，（连击点 >= 5 | （申斥回响豆，能量 <= 300 - 2 * 能量恢复速度，爆发cd >= 8））) | 连击点 = 7
         elseif ((aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points >= 5) or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.resource.energy <= 300 - 2 * aura_env.resource.energy_recover_pur_sec and aura_env.burst.cd >= 8))
                 or aura_env.resource.combo_points == 7 then
             next_spell.name = "毒伤"     
+            --不等待：至黑之夜buff > 0
+            if aura_env.aura["至黑之夜"].time > 0 then
+                next_spell.if_cast_now = true             
             --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
+            elseif aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
                 next_spell.if_cast_now = true 
-            --不等待：爆发cd <= 6，死亡猎手标记buff层数 < 2
-            elseif aura_env.burst.cd <= 8 and aura_env.aura["死亡猎手标记"].stack < 2 then
-                next_spell.if_cast_now = true     
-            --等待：爆发cd <= 6，死亡猎手标记buff层数 >= 2
-            elseif aura_env.burst.cd <= 8 and aura_env.aura["死亡猎手标记"].stack >= 2 then
-                next_spell.if_cast_now = false                      
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
+            --不等待：10码总人数 > 2
+            elseif aura_env.enemy.num_in_range_10 > 2 then
+                next_spell.if_cast_now = true                                       
+            --等待：锁喉buff > 6，割裂buff > 8
+            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 then
                 next_spell.if_cast_now = false
             end        
         --毁伤：侧袭buff > 0
@@ -1875,32 +1920,17 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --技能类型1：无    
         else
             next_spell.type = 1
-            --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true 
-            --不等待：爆发cd <= 6，死亡猎手标记buff层数 < 2
-            elseif aura_env.burst.cd <= 8 and aura_env.aura["死亡猎手标记"].stack < 2 then
-                next_spell.if_cast_now = true     
-            --等待：爆发cd <= 6，死亡猎手标记buff层数 >= 2
-            elseif aura_env.burst.cd <= 8 and aura_env.aura["死亡猎手标记"].stack >= 2 then
-                next_spell.if_cast_now = false           
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
-                next_spell.if_cast_now = false
-            end
         end         
     --循环45：（单毒刃）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），非轻巧毒刃天赋，毒刃cd = 爆发cd，死亡印记cd > 爆发cd
     elseif aura_env.loop_id == 45 then
-        --申斥回响豆
-        if aura_env.talent["申斥回响"] and aura_env.resource.combo_points < 5 and aura_env.aura["至黑之夜"].time > 0 then
-        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间
-        elseif aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time then
+        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间，至黑之夜buff = 0
+        if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time and aura_env.aura["至黑之夜"].time == 0 then
             aura_env.status.combo_points_shen_chi_hui_xiang = false
-        end        
-        --爆发：爆发cd = 0，割裂buff > 12，锁喉buff > 9，（非猩红风暴天赋 | 猩红风暴buff >= 10 | 10码总人数 <= 1）
+        end          
+        --爆发：爆发cd = 0，割裂buff > 12，（锁喉buff > 9 | 强化锁喉），（（死亡猎手标记buff层数 = 1,2，连击点 >= 5）| （至黑之夜buff > 0，连击点 >= 6））
         if aura_env.burst.cd == 0 and
-                aura_env.aura["割裂"].time > 12 and aura_env.aura["锁喉"].time > 9 and aura_env.aura["切割"].time > 0 and 
-                ((not aura_env.talent["猩红风暴"]) or aura_env.aura["猩红风暴"].time >= 10 or aura_env.enemy.num_in_range_10 <= 1) then
+                aura_env.aura["割裂"].time > 12 and (aura_env.aura["锁喉"].time > 9 or aura_env.aura["锁喉"].super or (aura_env.talent["连环屠戮"] and aura_env.enemy.num_in_range_10 > 2)) and aura_env.aura["切割"].time > 0 and
+                ((aura_env.aura["死亡猎手标记"].stack > 0 and aura_env.aura["死亡猎手标记"].stack <= 2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points >= 6)) then
             if aura_env.aura["徘徊黑暗"].time < 10 then
                 next_spell.if_cast_now = true
             elseif aura_env.resource.energy < aura_env.burst.energy then
@@ -1912,13 +1942,13 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].time > 0 and aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
             next_spell.name = "割裂"     
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"         
         --割裂：割裂buff = 0，（连击点 ≥ 5 | 申斥回响豆）      
         elseif aura_env.aura["割裂"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"                    
         --猩红风暴：猩红风暴天赋，猩红风暴buff  = 0，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1，10码总人数 - 猩红风暴buff人数 > 1      
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
             next_spell.name = "猩红风暴"  
         --切割：切割buff = 0，割裂buff > 0，连击点 > 0           
         elseif aura_env.aura["切割"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.resource.combo_points > 0 then
@@ -1927,13 +1957,16 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"              
         --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"         
-        --割裂：割裂buff <= 补偿时间，（连击点 ≥ 5 | 申斥回响豆）
-        elseif aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
+        --割裂：（割裂buff <= 4）|（割裂buff <= 补偿时间 | 申斥回响豆）
+        elseif aura_env.aura["割裂"].time <= 4 and aura_env.resource.combo_points >= 5 then
+            next_spell.name = "割裂"                 
+        --割裂：(（割裂buff <= 补偿时间，连击点 ≥ 5）|（割裂buff <= 补偿时间 | 申斥回响豆）)，死亡猎手标记buff层数 >= 2
+        elseif ((aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["割裂"].time <= 10.5 and aura_env.status.combo_points_shen_chi_hui_xiang)) and aura_env.aura["死亡猎手标记"].stack >= 2 then
             next_spell.name = "割裂"     
         --猩红风暴：猩红风暴天赋，猩红风暴buff  <= 5，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1         
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "猩红风暴"          
         --锁喉（技能类型3）：锁喉buff人数 < 10码内敌人，10码内敌人 <= 2，连击点 <= 6
         elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 2 and aura_env.resource.combo_points <= 6 then
@@ -1943,17 +1976,17 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"  
             next_spell.type = 3    
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
         elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "毁伤"   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"                   
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                               
         --刀扇：见者尽灭buff > 0，连击点 < 5
         elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "刀扇"   
         --锁喉：爆发cd < 5，锁喉buff <= 爆发cd + 9，非强化锁喉
-        elseif aura_env.burst.cd < 5 and aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= aura_env.burst.cd + 9 and (not aura_env.aura["锁喉"].super) then
+        elseif aura_env.burst.cd < 5 and aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= aura_env.burst.cd + 9 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and (not aura_env.aura["锁喉"].super) then
             next_spell.name = "锁喉"            
         --割裂：爆发cd < 5，割裂buff <= 爆发cd + 12
         elseif aura_env.burst.cd < 5 and aura_env.aura["割裂"].time <= aura_env.burst.cd + 12 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
@@ -1962,11 +1995,20 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif ((aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points >= 5) or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.resource.energy <= 300 - 2 * aura_env.resource.energy_recover_pur_sec and aura_env.burst.cd >= 8))
                 or aura_env.resource.combo_points == 7 then
             next_spell.name = "毒伤"     
+            --不等待：至黑之夜buff > 0
+            if aura_env.aura["至黑之夜"].time > 0 then
+                next_spell.if_cast_now = true             
             --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true                  
+            elseif aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
+                next_spell.if_cast_now = true        
+            --不等待：10码总人数 > 2
+            elseif aura_env.enemy.num_in_range_10 > 2 then
+                next_spell.if_cast_now = true             
+            --不等待：死亡猎手标记buff层数 = 3
+            elseif aura_env.aura["死亡猎手标记"].stack == 3 then
+                next_spell.if_cast_now = true                      
             --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
+            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 then
                 next_spell.if_cast_now = false
             end        
         --毁伤：侧袭buff > 0
@@ -1975,34 +2017,18 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --技能类型1：无    
         else
             next_spell.type = 1
-            --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true 
-            --不等待：爆发cd <= 3，连击点 <= 5
-            elseif aura_env.burst.cd <= 3 and aura_env.resource.combo_points <= 5 then
-                next_spell.if_cast_now = true     
-            --等待：爆发cd <= 3，连击点 > 5
-            elseif aura_env.burst.cd <= 3 and aura_env.resource.combo_points > 5 then
-                next_spell.if_cast_now = false     
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
-                next_spell.if_cast_now = false
-            end
         end             
     --循环44：（徘徊黑暗单毒刃）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗buff > 毒刃cd + 9，毒刃cd = 爆发cd，死亡印记cd > 爆发cd
     elseif aura_env.loop_id == 44 then
-        --申斥回响豆
-        if aura_env.talent["申斥回响"] and aura_env.resource.combo_points < 5 and aura_env.aura["至黑之夜"].time > 0 then
-        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间
-        elseif aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time then
+        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间，至黑之夜buff = 0
+        if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time and aura_env.aura["至黑之夜"].time == 0 then
             aura_env.status.combo_points_shen_chi_hui_xiang = false
-        end        
-        --爆发：爆发cd = 0，割裂buff > 12，锁喉buff > 9，（非猩红风暴天赋 | 猩红风暴buff >= 10 | 10码总人数 <= 1），（（死亡猎手标记buff层数 = 0，连击点 >= 6）| 徘徊黑暗buff < 10）
+        end         
+        --爆发：爆发cd = 0，割裂buff > 12，（锁喉buff > 9 | 强化锁喉），（（死亡猎手标记buff层数 = 1,2，连击点 >= 5）| （至黑之夜buff > 0，连击点 >= 6））
         if aura_env.burst.cd == 0 and
-                aura_env.aura["割裂"].time > 12 and aura_env.aura["锁喉"].time > 9 and aura_env.aura["切割"].time > 0 and 
-                ((not aura_env.talent["猩红风暴"]) or aura_env.aura["猩红风暴"].time >= 10 or aura_env.enemy.num_in_range_10 <= 1) and 
-                (aura_env.aura["死亡猎手标记"].stack == 0 and aura_env.resource.combo_points >= 6 or aura_env.aura["徘徊黑暗"].time < 10) then
-            if aura_env.aura["徘徊黑暗"].time < 10 then
+                aura_env.aura["割裂"].time > 12 and (aura_env.aura["锁喉"].time > 9 or aura_env.aura["锁喉"].super or (aura_env.talent["连环屠戮"] and aura_env.enemy.num_in_range_10 > 2)) and aura_env.aura["切割"].time > 0 and 
+                ((aura_env.aura["死亡猎手标记"].stack > 0 and aura_env.aura["死亡猎手标记"].stack <= 2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points >= 6)) then
+            if aura_env.aura["徘徊黑暗"].time < 11 then
                 next_spell.if_cast_now = true
             elseif aura_env.resource.energy < aura_env.burst.energy then
                 next_spell.if_cast_now = false
@@ -2013,13 +2039,13 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].time > 0 and aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
             next_spell.name = "割裂"     
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"         
         --割裂：割裂buff = 0，（连击点 ≥ 5 | 申斥回响豆）      
         elseif aura_env.aura["割裂"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"                    
         --猩红风暴：猩红风暴天赋，猩红风暴buff  = 0，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1，10码总人数 - 猩红风暴buff人数 > 1      
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
             next_spell.name = "猩红风暴"  
         --切割：切割buff = 0，割裂buff > 0，连击点 > 0           
         elseif aura_env.aura["切割"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.resource.combo_points > 0 then
@@ -2028,13 +2054,16 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"              
         --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 = 0，4（<=6至黑之夜buff > 0）
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points <= 6 and aura_env.aura["至黑之夜"].time > 0)) then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points <= 6 and aura_env.aura["至黑之夜"].time > 0)) then
             next_spell.name = "锁喉"       
-        --割裂：割裂buff <= 补偿时间，（连击点 ≥ 5 | 申斥回响豆）
-        elseif aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
+        --割裂：（割裂buff <= 4）|（割裂buff <= 补偿时间 | 申斥回响豆）
+        elseif aura_env.aura["割裂"].time <= 4 and aura_env.resource.combo_points >= 5 then
+            next_spell.name = "割裂"                 
+        --割裂：(（割裂buff <= 补偿时间，连击点 ≥ 5）|（割裂buff <= 补偿时间 | 申斥回响豆）)，死亡猎手标记buff层数 >= 2
+        elseif ((aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["割裂"].time <= 10.5 and aura_env.status.combo_points_shen_chi_hui_xiang)) and aura_env.aura["死亡猎手标记"].stack >= 2 then
             next_spell.name = "割裂"     
         --猩红风暴：猩红风暴天赋，猩红风暴buff  <= 5，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1         
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "猩红风暴"          
         --锁喉（技能类型3）：锁喉buff人数 < 10码内敌人，10码内敌人 <= 2，连击点 = 0，4（6至黑之夜buff > 0）
         elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 2 and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points == 6 and aura_env.aura["至黑之夜"].time > 0)) then
@@ -2044,17 +2073,17 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"  
             next_spell.type = 3    
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
         elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "毁伤"   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"                   
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                               
         --刀扇：见者尽灭buff > 0，连击点 < 5
         elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "刀扇"   
         --锁喉：爆发cd < 2，锁喉buff <= 爆发cd + 9，非强化锁喉
-        elseif aura_env.burst.cd < 2 and aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= aura_env.burst.cd + aura_env.burst.time and (not aura_env.aura["锁喉"].super) then
+        elseif aura_env.burst.cd < 2 and aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= aura_env.burst.cd + 9 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) then
             next_spell.name = "锁喉"            
         --割裂：爆发cd < 5，割裂buff <= 爆发cd + 12
         elseif aura_env.burst.cd < 5 and aura_env.aura["割裂"].time <= aura_env.burst.cd + 12 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
@@ -2062,18 +2091,21 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --毒伤：(至黑之夜buff = 0，（连击点 >= 5 | （申斥回响豆，能量 <= 300 - 2 * 能量恢复速度，爆发cd >= 8））) | 连击点 = 7
         elseif ((aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points >= 5) or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.resource.energy <= 300 - 2 * aura_env.resource.energy_recover_pur_sec and aura_env.burst.cd >= 8))
                 or aura_env.resource.combo_points == 7 then
-            next_spell.name = "毒伤"     
-            --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true 
-            --不等待：爆发cd <= 死亡猎手标记buff层数 * 3 + 3，（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 3 * aura_env.aura["死亡猎手标记"].stack + 3 and (not aura_env.aura["死亡猎手标记"].stack == 0) then
-                next_spell.if_cast_now = true     
-            --等待：爆发cd <= 死亡猎手标记buff层数 * 3 + 3，非（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 3 * aura_env.aura["死亡猎手标记"].stack + 3 and aura_env.aura["死亡猎手标记"].stack == 0 then
-                next_spell.if_cast_now = false                      
+            next_spell.name = "毒伤"  
+            --不等待：至黑之夜buff > 0
+            if aura_env.aura["至黑之夜"].time > 0 then
+                next_spell.if_cast_now = true             
+            --不等待：能量 > 150
+            elseif aura_env.resource.energy > 150 then
+                next_spell.if_cast_now = true        
+            --不等待：10码总人数 > 2
+            elseif aura_env.enemy.num_in_range_10 > 2 then
+                next_spell.if_cast_now = true             
+            --不等待：死亡猎手标记buff层数 = 3
+            elseif aura_env.aura["死亡猎手标记"].stack == 3 then
+                next_spell.if_cast_now = true                      
             --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
+            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 then
                 next_spell.if_cast_now = false
             end        
         --毁伤：侧袭buff > 0
@@ -2082,30 +2114,16 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --技能类型1：无    
         else
             next_spell.type = 1
-            --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true 
-            --不等待：爆发cd <= 死亡猎手标记buff层数 * 3 + 3，（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 3 * aura_env.aura["死亡猎手标记"].stack + 3 and (not (aura_env.aura["死亡猎手标记"].stack == 0 and aura_env.resource.combo_points >= 6)) then
-                next_spell.if_cast_now = true     
-            --等待：爆发cd <= 死亡猎手标记buff层数 * 3 + 3，非（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 3 * aura_env.aura["死亡猎手标记"].stack + 3 and aura_env.aura["死亡猎手标记"].stack == 0 and aura_env.resource.combo_points >= 6 then
-                next_spell.if_cast_now = false     
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
-                next_spell.if_cast_now = false
-            end
         end     
-    --循环43：（双毒刃君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 爆发cd        
+    --循环43：（双毒刃君王）爆发前戏,（至黑之夜buff > 0 | 死亡猎手标记buff > 0），死亡印记cd > 爆发cd        
     elseif aura_env.loop_id == 43 then
-        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间
-        if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time then
+        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间，至黑之夜buff = 0
+        if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time and aura_env.aura["至黑之夜"].time == 0 then
             aura_env.status.combo_points_shen_chi_hui_xiang = false
         end        
-        --爆发：爆发cd = 0，割裂buff > 17，（非猩红风暴天赋 | 猩红风暴buff >= 10 | 10码总人数 <= 1）
+        --爆发：爆发cd = 0，割裂buff > 17，（锁喉buff > 9 | 强化锁喉）
         if aura_env.burst.cd == 0 and
-                aura_env.aura["割裂"].time > 17 and aura_env.aura["切割"].time > 0 and 
-                ((not aura_env.talent["猩红风暴"]) or aura_env.aura["猩红风暴"].time >= 10 or aura_env.enemy.num_in_range_10 <= 1) then
+                aura_env.aura["割裂"].time > 17 and (aura_env.aura["锁喉"].time > 9 or aura_env.aura["锁喉"].super or (aura_env.talent["连环屠戮"] and aura_env.enemy.num_in_range_10 > 2)) and aura_env.aura["切割"].time > 0 then
             if aura_env.aura["徘徊黑暗"].time < 10 then
                 next_spell.if_cast_now = true
             elseif aura_env.resource.energy < aura_env.burst.energy then
@@ -2117,13 +2135,13 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].time > 0 and aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
             next_spell.name = "割裂"     
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) then
             next_spell.name = "锁喉"         
         --割裂：割裂buff = 0，（连击点 ≥ 5 | 申斥回响豆）      
         elseif aura_env.aura["割裂"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"                    
         --猩红风暴：猩红风暴天赋，猩红风暴buff  = 0，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1，10码总人数 - 猩红风暴buff人数 > 1      
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
             next_spell.name = "猩红风暴"  
         --切割：切割buff = 0，割裂buff > 0，连击点 > 0           
         elseif aura_env.aura["切割"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.resource.combo_points > 0 then
@@ -2132,13 +2150,16 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"              
         --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 = 0，4（6至黑之夜buff > 0）
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points <= 6 and aura_env.aura["至黑之夜"].time > 0)) then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points <= 6 and aura_env.aura["至黑之夜"].time > 0)) then
             next_spell.name = "锁喉"       
-        --割裂：割裂buff <= 补偿时间，（连击点 ≥ 5 | 申斥回响豆）
-        elseif aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
-            next_spell.name = "割裂"     
-        --猩红风暴：猩红风暴天赋，猩红风暴buff  <= 5，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1         
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
+        --割裂：（割裂buff <= 4）|（割裂buff <= 补偿时间 | 申斥回响豆）
+        elseif aura_env.aura["割裂"].time <= 4 and aura_env.resource.combo_points >= 5 then
+            next_spell.name = "割裂"                 
+        --割裂：(（割裂buff <= 补偿时间，连击点 ≥ 5）|（割裂buff <= 补偿时间 | 申斥回响豆）)，死亡猎手标记buff层数 >= 2
+        elseif ((aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["割裂"].time <= 10.5 and aura_env.status.combo_points_shen_chi_hui_xiang)) and aura_env.aura["死亡猎手标记"].stack >= 2 then
+            next_spell.name = "割裂"       
+        --猩红风暴：猩红风暴天赋，猩红风暴buff <= 5，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1         
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "猩红风暴"          
         --锁喉（技能类型3）：锁喉buff人数 < 10码内敌人，10码内敌人 <= 2，连击点 = 0，4（6至黑之夜buff > 0）
         elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 2 and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points == 6 and aura_env.aura["至黑之夜"].time > 0)) then
@@ -2148,33 +2169,36 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"  
             next_spell.type = 3    
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
         elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "毁伤"   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"                   
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                           
         --刀扇：见者尽灭buff > 0，连击点 < 5
         elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "刀扇"   
-        --锁喉：爆发cd < 5，锁喉buff <= 6，非强化锁喉，连击点 <= 6
-        elseif aura_env.burst.cd < 5 and aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and aura_env.resource.combo_points <= 6 then
+        --锁喉：爆发cd < 2，锁喉buff <= 爆发cd + 9，非强化锁喉
+        elseif aura_env.burst.cd < 2 and aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= aura_env.burst.cd + 9 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) then
             next_spell.name = "锁喉"            
         --割裂：爆发cd < 5，割裂buff <= 爆发cd + 17
         elseif aura_env.burst.cd < 5 and aura_env.aura["割裂"].time <= aura_env.burst.cd + 17 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
-            next_spell.name = "割裂"                               
+            next_spell.name = "割裂"                      
         --毒伤：(至黑之夜buff = 0，（连击点 >= 5 | （申斥回响豆，能量 <= 300 - 2 * 能量恢复速度，爆发cd >= 8））) | 连击点 = 7
         elseif ((aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points >= 5) or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.resource.energy <= 300 - 2 * aura_env.resource.energy_recover_pur_sec and aura_env.burst.cd >= 8))
                 or aura_env.resource.combo_points == 7 then
             next_spell.name = "毒伤"     
+            --不等待：至黑之夜buff > 0
+            if aura_env.aura["至黑之夜"].time > 0 then
+                next_spell.if_cast_now = true             
             --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
+            elseif aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
                 next_spell.if_cast_now = true 
-            --等待：爆发cd <= 5
-            elseif aura_env.burst.cd <= 5 then
-                next_spell.if_cast_now = false                      
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
+            --不等待：10码总人数 > 2
+            elseif aura_env.enemy.num_in_range_10 > 2 then
+                next_spell.if_cast_now = true                                       
+            --等待：锁喉buff > 6，割裂buff > 8
+            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 then
                 next_spell.if_cast_now = false
             end        
         --毁伤：侧袭buff > 0
@@ -2183,141 +2207,175 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --技能类型1：无    
         else
             next_spell.type = 1
-            --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true 
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
-                next_spell.if_cast_now = false
-            end
         end                       
     --循环42：（消失死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋，非连环屠戮天赋，消失cd <= 爆发cd + 6
-    elseif aura_env.loop_id == 42 then
-        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间 + 5
-        if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time + 5 then
-            aura_env.status.combo_points_shen_chi_hui_xiang = false
-        end        
-        --爆发：爆发cd = 0，割裂buff > 12，（非猩红风暴天赋 | 猩红风暴buff >= 10 | 10码总人数 <= 1），（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-        if aura_env.burst.cd == 0 and
-                aura_env.aura["割裂"].time > 12 and aura_env.aura["切割"].time > 0 and 
-                ((not aura_env.talent["猩红风暴"]) or aura_env.aura["猩红风暴"].time >= 10 or aura_env.enemy.num_in_range_10 <= 1) and 
-                (aura_env.aura["死亡猎手标记"].stack == 0 or (aura_env.aura["死亡猎手标记"].stack == 1 and aura_env.resource.combo_points >= 5)) then
-            if aura_env.resource.energy < aura_env.burst.energy then
-                next_spell.if_cast_now = false
-            end                    
-            aura_env.loop_id = 52
-            return aura_env.CalculateSpellTypeByLoopID(next_spell.if_cast_now)                         
-        --割裂：0 < 割裂buff < 1，连击点 > 0         
-        elseif aura_env.aura["割裂"].time > 0 and aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
-            next_spell.name = "割裂"     
-        --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
-            next_spell.name = "锁喉"         
-        --割裂：割裂buff = 0，（连击点 ≥ 5 | 申斥回响豆）      
-        elseif aura_env.aura["割裂"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
-            next_spell.name = "割裂"                    
-        --猩红风暴：猩红风暴天赋，猩红风暴buff  = 0，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1，10码总人数 - 猩红风暴buff人数 > 1      
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
-            next_spell.name = "猩红风暴"  
-        --切割：切割buff = 0，割裂buff > 0，连击点 > 0           
-        elseif aura_env.aura["切割"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.resource.combo_points > 0 then
-            next_spell.name = "切割"                         
-        --申斥回响：申斥回响天赋，申斥回响cd = 0，连击点 < 5
-        elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "申斥回响"              
-        --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 = 0，4（6至黑之夜buff > 0）
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points == 6 and aura_env.aura["至黑之夜"].time > 0)) then
-            next_spell.name = "锁喉"       
-        --割裂：割裂buff <= 补偿时间，（连击点 ≥ 5 | 申斥回响豆）
-        elseif aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
-            next_spell.name = "割裂"     
-        --猩红风暴：猩红风暴天赋，猩红风暴buff  <= 5，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1         
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "猩红风暴"          
-        --锁喉（技能类型3）：锁喉buff人数 < 10码内敌人，10码内敌人 <= 2，连击点 = 0，4（6至黑之夜buff > 0）
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 2 and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points == 6 and aura_env.aura["至黑之夜"].time > 0)) then
-            next_spell.name = "锁喉"  
-            next_spell.type = 3                        
-        --割裂（技能类型3）：割裂buff人数 < 10码内敌人，10码内敌人 <= 3，割裂buff最小时间 <= 补偿时间，（毒伤buff >= 4 | 毒伤buff = 0），（连击点 ≥ 5 | 申斥回响豆）
-        elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
-            next_spell.name = "割裂"  
-            next_spell.type = 3    
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"                   
-        --刀扇：见者尽灭buff > 0，连击点 < 5
-        elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "刀扇"   
-        --割裂：爆发cd < 5，割裂buff <= 爆发cd + 12
-        elseif aura_env.burst.cd < 5 and aura_env.aura["割裂"].time <= aura_env.burst.cd + 12 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
-            next_spell.name = "割裂"                               
-        --毒伤：(至黑之夜buff = 0，（连击点 >= 5 | （申斥回响豆，能量 <= 300 - 2 * 能量恢复速度，爆发cd >= 8））) | 连击点 = 7
-        elseif ((aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points >= 5) or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.resource.energy <= 300 - 2 * aura_env.resource.energy_recover_pur_sec and aura_env.burst.cd >= 8))
-                or aura_env.resource.combo_points == 7 then
-            next_spell.name = "毒伤"     
-            --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true 
-            --不等待：爆发cd <= 5，（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 5 and (not (aura_env.aura["死亡猎手标记"].stack == 0 or aura_env.aura["死亡猎手标记"].stack == 1)) then
-                next_spell.if_cast_now = true     
-            --等待：爆发cd <= 5，非（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 5 and (aura_env.aura["死亡猎手标记"].stack == 0 or aura_env.aura["死亡猎手标记"].stack == 1) then
-                next_spell.if_cast_now = false                      
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
-                next_spell.if_cast_now = false
-            end        
-        --毁伤：侧袭buff > 0
-        elseif aura_env.aura["侧袭"].time > 0 then
-            next_spell.name = "毁伤"             
-        --技能类型1：无    
-        else
-            next_spell.type = 1
-            --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true 
-            --不等待：爆发cd <= 5，（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 5 and (not (aura_env.aura["死亡猎手标记"].stack == 0 or (aura_env.aura["死亡猎手标记"].stack == 1 and aura_env.resource.combo_points >= 5))) then
-                next_spell.if_cast_now = true     
-            --等待：爆发cd <= 5，非（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 5 and (aura_env.aura["死亡猎手标记"].stack == 0 or (aura_env.aura["死亡猎手标记"].stack == 1 and aura_env.resource.combo_points >= 5)) then
-                next_spell.if_cast_now = false     
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
-                next_spell.if_cast_now = false
-            end
-        end  
+    -- elseif aura_env.loop_id == 42 then
+        -- --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间
+        -- if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time then
+        --     aura_env.status.combo_points_shen_chi_hui_xiang = false
+        -- end        
+    --     --爆发：爆发cd = 0，割裂buff > 12，（非猩红风暴天赋 | 猩红风暴buff >= 10 | 10码总人数 <= 1），（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
+    --     if aura_env.burst.cd == 0 and
+    --             aura_env.aura["割裂"].time > 12 and aura_env.aura["切割"].time > 0 and 
+    --             ((not aura_env.talent["猩红风暴"]) or aura_env.aura["猩红风暴"].time >= 10 or aura_env.enemy.num_in_range_10 <= 1) and 
+    --             (aura_env.aura["死亡猎手标记"].stack == 0 or (aura_env.aura["死亡猎手标记"].stack == 1 and aura_env.resource.combo_points >= 5)) then
+    --         if aura_env.resource.energy < aura_env.burst.energy then
+    --             next_spell.if_cast_now = false
+    --         end                    
+    --         aura_env.loop_id = 52
+    --         return aura_env.CalculateSpellTypeByLoopID(next_spell.if_cast_now)                         
+    --     --申斥回响（起手专用）：申斥回响天赋，申斥回响cd = 0，割裂buff = 0，消失cd = 0，连击点 <= 5，10码总人数 <= 1         
+    --     elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.aura["割裂"].time == 0 and aura_env.spell["消失"].cd == 0 and aura_env.resource.combo_points <= 5 and aura_env.enemy.num_in_range_10 <= 1 then
+    --         next_spell.name = "申斥回响"    
+    --     --锁喉（起手专用）：锁喉cd = 0，（锁喉buff <= 6，非强化锁喉）割裂buff = 0，消失cd = 0，非（连击点 = 7 | 申斥回响5豆），10码总人数 <= 1
+    --     elseif aura_env.spell["锁喉"].cd == 0 and (aura_env.aura["锁喉"].time <= 6 or (not aura_env.aura["锁喉"].super)) and aura_env.aura["割裂"].time == 0 and aura_env.spell["消失"].cd == 0 and (not (aura_env.status.combo_points_shen_chi_hui_xiang_5 or aura_env.resource.combo_points == 7)) and aura_env.enemy.num_in_range_10 <= 1 then
+    --         next_spell.name = "锁喉"      
+    --     --伏击（起手专用）：割裂buff = 0，消失cd == 0，非（连击点 = 7 | 申斥回响5豆），10码总人数 <= 1  
+    --     elseif aura_env.aura["割裂"].time == 0 and aura_env.spell["消失"].cd == 0 and (not (aura_env.status.combo_points_shen_chi_hui_xiang_5 or aura_env.resource.combo_points == 7)) and aura_env.enemy.num_in_range_10 <= 1 then
+    --         next_spell.name = "伏击"                 
+    --     --割裂（起手专用）：割裂buff = 0，消失cd == 0，（连击点 = 7 | 申斥回响5豆），10码总人数 <= 1         
+    --     elseif aura_env.aura["割裂"].time == 0 and aura_env.spell["消失"].cd == 0 and (aura_env.status.combo_points_shen_chi_hui_xiang_5 or aura_env.resource.combo_points == 7) and aura_env.enemy.num_in_range_10 <= 1 then
+    --         next_spell.name = "割裂"            
+    --     --切割（起手专用）：切割buff = 0，0 < 连击点 <= 2，10码总人数 <= 1         
+    --     elseif aura_env.aura["切割"].time == 0 and aura_env.resource.combo_points > 0 and aura_env.resource.combo_points <= 2 and aura_env.enemy.num_in_range_10 <= 1 then
+    --         next_spell.name = "切割"                          
+    --     --割裂：0 < 割裂buff < 1，连击点 > 0         
+    --     elseif aura_env.aura["割裂"].time > 0 and aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
+    --         next_spell.name = "割裂"     
+    --     --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
+    --     elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+    --         next_spell.name = "锁喉"         
+    --     --割裂：割裂buff = 0，（连击点 ≥ 5 | 申斥回响豆）      
+    --     elseif aura_env.aura["割裂"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
+    --         next_spell.name = "割裂"                    
+    --     --猩红风暴：猩红风暴天赋，猩红风暴buff  = 0，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1，10码总人数 - 猩红风暴buff人数 > 1      
+    --     elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
+    --         next_spell.name = "猩红风暴"  
+    --     --切割：切割buff = 0，割裂buff > 0，连击点 > 0           
+    --     elseif aura_env.aura["切割"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.resource.combo_points > 0 then
+    --         next_spell.name = "切割"                         
+    --     --申斥回响：申斥回响天赋，申斥回响cd = 0，连击点 < 5
+    --     elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
+    --         next_spell.name = "申斥回响"              
+    --     --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 = 0，4（6至黑之夜buff > 0）
+    --     elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points == 6 and aura_env.aura["至黑之夜"].time > 0)) then
+    --         next_spell.name = "锁喉"       
+    --     --割裂：（割裂buff <= 4）|（割裂buff <= 补偿时间 | 申斥回响豆）
+    --     elseif aura_env.aura["割裂"].time <= 4 and aura_env.resource.combo_points >= 5 then
+    --         next_spell.name = "割裂"                 
+    --     --割裂：(（割裂buff <= 补偿时间，连击点 ≥ 5）|（割裂buff <= 补偿时间 | 申斥回响豆）)，死亡猎手标记buff层数 >= 2
+    --     elseif ((aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["割裂"].time <= 10.5 and aura_env.status.combo_points_shen_chi_hui_xiang)) and aura_env.aura["死亡猎手标记"].stack >= 2 then
+    --         next_spell.name = "割裂"      
+    --     --猩红风暴：猩红风暴天赋，猩红风暴buff  <= 5，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1         
+    --     elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
+    --         next_spell.name = "猩红风暴"          
+    --     --锁喉（技能类型3）：锁喉buff人数 < 10码内敌人，10码内敌人 <= 2，连击点 = 0，4（6至黑之夜buff > 0）
+    --     elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 2 and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points == 6 and aura_env.aura["至黑之夜"].time > 0)) then
+    --         next_spell.name = "锁喉"  
+    --         next_spell.type = 3                        
+    --     --割裂（技能类型3）：割裂buff人数 < 10码内敌人，10码内敌人 <= 3，割裂buff最小时间 <= 补偿时间，（毒伤buff >= 4 | 毒伤buff = 0），（连击点 ≥ 5 | 申斥回响豆）
+    --     elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
+    --         next_spell.name = "割裂"  
+    --         next_spell.type = 3    
+    --     --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+    --     elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
+    --         next_spell.name = "毁伤"   
+    --     --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
+    --     elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+    --         next_spell.name = "毁伤"                   
+    --     --刀扇：见者尽灭buff > 0，连击点 < 5
+    --     elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 5 then
+    --         next_spell.name = "刀扇"   
+    --     --割裂：爆发cd < 5，割裂buff <= 爆发cd + 12
+    --     elseif aura_env.burst.cd < 5 and aura_env.aura["割裂"].time <= aura_env.burst.cd + 12 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
+    --         next_spell.name = "割裂"                               
+    --     --毒伤：(至黑之夜buff = 0，（连击点 >= 5 | （申斥回响豆，能量 <= 300 - 2 * 能量恢复速度，爆发cd >= 8））) | 连击点 = 7
+    --     elseif ((aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points >= 5) or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.resource.energy <= 300 - 2 * aura_env.resource.energy_recover_pur_sec and aura_env.burst.cd >= 8))
+    --             or aura_env.resource.combo_points == 7 then
+    --         next_spell.name = "毒伤"     
+    --         --不等待：能量 > 300 - 2 * 能量恢复速度
+    --         if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
+    --             next_spell.if_cast_now = true 
+    --         --不等待：10码总人数 > 2
+    --         elseif aura_env.enemy.num_in_range_10 > 2 then
+    --             next_spell.if_cast_now = true                        
+    --         --不等待：爆发cd <= 5，（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
+    --         elseif aura_env.burst.cd <= 5 and (not (aura_env.aura["死亡猎手标记"].stack == 0 or aura_env.aura["死亡猎手标记"].stack == 1)) then
+    --             next_spell.if_cast_now = true     
+    --         --等待：爆发cd <= 5，非（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
+    --         elseif aura_env.burst.cd <= 5 and (aura_env.aura["死亡猎手标记"].stack == 0 or aura_env.aura["死亡猎手标记"].stack == 1) then
+    --             next_spell.if_cast_now = false                      
+    --         --等待：锁喉buff > 6，割裂buff > 8
+    --         elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 then
+    --             next_spell.if_cast_now = false
+    --         end        
+    --     --毁伤：侧袭buff > 0
+    --     elseif aura_env.aura["侧袭"].time > 0 then
+    --         next_spell.name = "毁伤"             
+    --     --技能类型1：无    
+    --     else
+    --         next_spell.type = 1
+    --         --不等待：能量 > 300 - 2 * 能量恢复速度
+    --         if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
+    --             next_spell.if_cast_now = true 
+    --         --不等待：10码总人数 > 2
+    --         elseif aura_env.enemy.num_in_range_10 > 2 then
+    --             next_spell.if_cast_now = true                        
+    --         --不等待：爆发cd <= 5，（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
+    --         elseif aura_env.burst.cd <= 5 and (not (aura_env.aura["死亡猎手标记"].stack == 0 or (aura_env.aura["死亡猎手标记"].stack == 1 and aura_env.resource.combo_points >= 5))) then
+    --             next_spell.if_cast_now = true     
+    --         --等待：爆发cd <= 5，非（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
+    --         elseif aura_env.burst.cd <= 5 and (aura_env.aura["死亡猎手标记"].stack == 0 or (aura_env.aura["死亡猎手标记"].stack == 1 and aura_env.resource.combo_points >= 5)) then
+    --             next_spell.if_cast_now = false     
+    --         --等待：锁喉buff > 6，割裂buff > 8
+    --         elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 then
+    --             next_spell.if_cast_now = false
+    --         end
+    --     end  
     --循环41：（死印君王）爆发前戏，（至黑之夜buff > 0 | 死亡猎手标记buff > 0），徘徊黑暗天赋
     elseif aura_env.loop_id == 41 then
-        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间 + 5
-        if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time + 5 then
+        --申斥回响豆禁用：申斥回响cd > 爆发cd + 爆发时间，至黑之夜buff = 0
+        if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time and aura_env.aura["至黑之夜"].time == 0 then
             aura_env.status.combo_points_shen_chi_hui_xiang = false
         end        
-        --爆发：爆发cd = 0，割裂buff > 12，（非猩红风暴天赋 | 猩红风暴buff >= 10 | 10码总人数 <= 1），（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
+        --爆发：爆发cd = 0，割裂buff > 12，（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 > 0））
         if aura_env.burst.cd == 0 and
                 aura_env.aura["割裂"].time > 12 and aura_env.aura["切割"].time > 0 and 
-                ((not aura_env.talent["猩红风暴"]) or aura_env.aura["猩红风暴"].time >= 10 or aura_env.enemy.num_in_range_10 <= 1) and 
-                (aura_env.aura["死亡猎手标记"].stack == 0 or (aura_env.aura["死亡猎手标记"].stack == 1 and aura_env.resource.combo_points >= 5)) then
+                (aura_env.aura["死亡猎手标记"].stack == 0 or (aura_env.aura["死亡猎手标记"].stack == 1 and aura_env.resource.combo_points > 0)) then
             if aura_env.resource.energy < aura_env.burst.energy then
                 next_spell.if_cast_now = false
             end                    
             aura_env.loop_id = 51
-            return aura_env.CalculateSpellTypeByLoopID(next_spell.if_cast_now)                         
+            return aura_env.CalculateSpellTypeByLoopID(next_spell.if_cast_now)   
+        --单体起手专用：切割buff = 0，割裂buff = 0，（10码总人数 <= 1 | 非连环屠戮天赋）
+        elseif aura_env.aura["切割"].time == 0 and aura_env.aura["割裂"].time == 0 and (aura_env.enemy.num_in_range_10 <= 1 or (not aura_env.talent["连环屠戮"])) then           
+            --申斥回响（起手专用）：申斥回响天赋，申斥回响cd = 0，割裂buff = 0，消失cd = 0，连击点 <= 5
+            if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.aura["割裂"].time == 0 and aura_env.spell["消失"].cd == 0 and aura_env.resource.combo_points <= 5 then
+                next_spell.name = "申斥回响"    
+            --锁喉（起手专用）：锁喉cd = 0，（锁喉buff <= 6，非强化锁喉）割裂buff = 0，消失cd = 0，非（连击点 = 7 | 申斥回响5豆）
+            elseif aura_env.spell["锁喉"].cd == 0 and (aura_env.aura["锁喉"].time <= 6 or (not aura_env.aura["锁喉"].super)) and aura_env.aura["割裂"].time == 0 and aura_env.spell["消失"].cd == 0 and (not (aura_env.status.combo_points_shen_chi_hui_xiang_5 or aura_env.resource.combo_points == 7)) then
+                next_spell.name = "锁喉"      
+            --伏击（起手专用）：割裂buff = 0，消失cd == 0，非（连击点 = 7 | 申斥回响5豆） 
+            elseif aura_env.aura["割裂"].time == 0 and aura_env.spell["消失"].cd == 0 and (not (aura_env.status.combo_points_shen_chi_hui_xiang_5 or aura_env.resource.combo_points == 7)) then
+                next_spell.name = "伏击"                 
+            --割裂（起手专用）：割裂buff = 0，消失cd == 0，（连击点 = 7 | 申斥回响5豆）  
+            elseif aura_env.aura["割裂"].time == 0 and aura_env.spell["消失"].cd == 0 and (aura_env.status.combo_points_shen_chi_hui_xiang_5 or aura_env.resource.combo_points == 7) then
+                next_spell.name = "割裂"            
+            --切割（起手专用）：切割buff = 0，0 < 连击点 <= 2      
+            elseif aura_env.aura["切割"].time == 0 and aura_env.resource.combo_points > 0 and aura_env.resource.combo_points <= 2 then
+                next_spell.name = "切割"         
+            end
         --割裂：0 < 割裂buff < 1，连击点 > 0         
         elseif aura_env.aura["割裂"].time > 0 and aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
             next_spell.name = "割裂"     
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) then
             next_spell.name = "锁喉"         
         --割裂：割裂buff = 0，（连击点 ≥ 5 | 申斥回响豆）      
         elseif aura_env.aura["割裂"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"                    
         --猩红风暴：猩红风暴天赋，猩红风暴buff  = 0，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1，10码总人数 - 猩红风暴buff人数 > 1      
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time == 0 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 and aura_env.enemy.num_in_range_10 - aura_env.aura["猩红风暴"].effect_unit_num >= 1 then
             next_spell.name = "猩红风暴"  
         --切割：切割buff = 0，割裂buff > 0，连击点 > 0           
         elseif aura_env.aura["切割"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.resource.combo_points > 0 then
@@ -2326,13 +2384,16 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"              
         --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 = 0，4（6至黑之夜buff > 0）
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points == 6 and aura_env.aura["至黑之夜"].time > 0)) then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points == 6 and aura_env.aura["至黑之夜"].time > 0)) then
             next_spell.name = "锁喉"       
-        --割裂：割裂buff <= 补偿时间，（连击点 ≥ 5 | 申斥回响豆）
-        elseif aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
-            next_spell.name = "割裂"     
+        --割裂：（割裂buff <= 4）|（割裂buff <= 补偿时间 | 申斥回响豆）
+        elseif aura_env.aura["割裂"].time <= 4 and aura_env.resource.combo_points >= 5 then
+            next_spell.name = "割裂"                 
+        --割裂：(（割裂buff <= 补偿时间，连击点 ≥ 5）|（割裂buff <= 补偿时间 | 申斥回响豆）)，死亡猎手标记buff层数 >= 2
+        elseif ((aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["割裂"].time <= 10.5 and aura_env.status.combo_points_shen_chi_hui_xiang)) and aura_env.aura["死亡猎手标记"].stack >= 2 then
+            next_spell.name = "割裂"      
         --猩红风暴：猩红风暴天赋，猩红风暴buff  <= 5，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1         
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "猩红风暴"          
         --锁喉（技能类型3）：锁喉buff人数 < 10码内敌人，10码内敌人 <= 2，连击点 = 0，4（6至黑之夜buff > 0）
         elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 2 and (aura_env.resource.combo_points == 0 or (aura_env.resource.combo_points == 4 and aura_env.aura["至黑之夜"].time == 0) or (aura_env.resource.combo_points == 6 and aura_env.aura["至黑之夜"].time > 0)) then
@@ -2342,12 +2403,12 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"  
             next_spell.type = 3    
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
         elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "毁伤"   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"                   
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                                  
         --刀扇：见者尽灭buff > 0，连击点 < 5
         elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "刀扇"   
@@ -2358,17 +2419,20 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif ((aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points >= 5) or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.resource.energy <= 300 - 2 * aura_env.resource.energy_recover_pur_sec and aura_env.burst.cd >= 8))
                 or aura_env.resource.combo_points == 7 then
             next_spell.name = "毒伤"     
-            --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
+            --不等待：至黑之夜buff > 0
+            if aura_env.aura["至黑之夜"].time > 0 then
                 next_spell.if_cast_now = true 
-            --不等待：爆发cd <= 5，（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 5 and (not (aura_env.aura["死亡猎手标记"].stack == 0 or aura_env.aura["死亡猎手标记"].stack == 1)) then
-                next_spell.if_cast_now = true     
-            --等待：爆发cd <= 5，非（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 5 and (aura_env.aura["死亡猎手标记"].stack == 0 or aura_env.aura["死亡猎手标记"].stack == 1) then
-                next_spell.if_cast_now = false                      
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
+            --不等待：能量 > 300 - 2 * 能量恢复速度
+            elseif aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
+                next_spell.if_cast_now = true 
+            --不等待：10码总人数 > 2
+            elseif aura_env.enemy.num_in_range_10 > 2 then
+                next_spell.if_cast_now = true                        
+            --不等待：爆发cd <= 5，死亡猎手标记buff层数 > 1
+            elseif aura_env.burst.cd <= 5 and aura_env.aura["死亡猎手标记"].stack > 1 then
+                next_spell.if_cast_now = true                       
+            --等待：锁喉buff > 6，割裂buff > 8
+            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 then
                 next_spell.if_cast_now = false
             end        
         --毁伤：侧袭buff > 0
@@ -2379,15 +2443,9 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
             next_spell.type = 1
             --不等待：能量 > 300 - 2 * 能量恢复速度
             if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true 
-            --不等待：爆发cd <= 5，（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 5 and (not (aura_env.aura["死亡猎手标记"].stack == 0 or (aura_env.aura["死亡猎手标记"].stack == 1 and aura_env.resource.combo_points >= 5))) then
-                next_spell.if_cast_now = true     
-            --等待：爆发cd <= 5，非（死亡猎手标记buff层数 = 0 | （死亡猎手标记buff层数 = 1，连击点 >= 5））
-            elseif aura_env.burst.cd <= 5 and (aura_env.aura["死亡猎手标记"].stack == 0 or (aura_env.aura["死亡猎手标记"].stack == 1 and aura_env.resource.combo_points >= 5)) then
-                next_spell.if_cast_now = false     
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
+                next_spell.if_cast_now = true        
+            --等待：死亡猎手标记buff层数 = 0，锁喉buff > 6，割裂buff > 8    
+            elseif aura_env.aura["死亡猎手标记"].stack == 0 and aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 then
                 next_spell.if_cast_now = false
             end
         end  
@@ -2397,10 +2455,10 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         if aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd > aura_env.burst.cd + aura_env.burst.time + 5 then
             aura_env.status.combo_points_shen_chi_hui_xiang = false
         end        
-        --爆发：爆发cd = 0，割裂buff > 爆发时间 + 3，锁喉 > 爆发时间，切割buff > 0，（非猩红风暴天赋 | 猩红风暴buff >= 10 | 10码总人数 <= 1）
+        --爆发：爆发cd = 0，割裂buff > 爆发时间 + 3，（锁喉buff > 9 | 强化锁喉），切割buff > 0，（非猩红风暴天赋 | 猩红风暴buff >= 5 | 10码总人数 <= 1）
         if aura_env.burst.cd == 0 and
-                aura_env.aura["割裂"].time > aura_env.burst.time + 3 and aura_env.aura["锁喉"].time > aura_env.burst.time and aura_env.aura["切割"].time > 0 and
-                ((not aura_env.talent["猩红风暴"]) or aura_env.aura["猩红风暴"].time >= 10 or aura_env.enemy.num_in_range_10 <= 1) then
+                aura_env.aura["割裂"].time > aura_env.burst.time + 3 and (aura_env.aura["锁喉"].time > 9 or aura_env.aura["锁喉"].super or (aura_env.talent["连环屠戮"] and aura_env.enemy.num_in_range_10 > 2)) and aura_env.aura["切割"].time > 0 and
+                ((not aura_env.talent["猩红风暴"]) or aura_env.aura["猩红风暴"].time >= 5 or aura_env.enemy.num_in_range_10 <= 1) then
             if aura_env.resource.energy < aura_env.burst.energy then
                 next_spell.if_cast_now = false
             end                    
@@ -2410,7 +2468,7 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].time > 0 and aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
             next_spell.name = "割裂"     
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"         
         --割裂：割裂buff = 0，（连击点 ≥ 5 | 申斥回响豆）      
         elseif aura_env.aura["割裂"].time == 0 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
@@ -2425,10 +2483,13 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"              
         --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 < 7
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and aura_env.resource.combo_points < 7 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points < 7 then
             next_spell.name = "锁喉"       
-        --割裂：割裂buff <= 补偿时间，（连击点 ≥ 5 | 申斥回响豆）
-        elseif aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
+        --割裂：（割裂buff <= 4）|（割裂buff <= 补偿时间 | 申斥回响豆）
+        elseif aura_env.aura["割裂"].time <= 4 and aura_env.resource.combo_points >= 5 then
+            next_spell.name = "割裂"                 
+        --割裂：(（割裂buff <= 补偿时间，连击点 ≥ 5）|（割裂buff <= 补偿时间 | 申斥回响豆）)，死亡猎手标记buff层数 >= 2
+        elseif ((aura_env.aura["割裂"].time <= aura_env.resource.combo_points * 1.2 + 1.2 and aura_env.resource.combo_points >= 5) or (aura_env.aura["割裂"].time <= 10.5 and aura_env.status.combo_points_shen_chi_hui_xiang)) and aura_env.aura["死亡猎手标记"].stack >= 2 then
             next_spell.name = "割裂"     
         --猩红风暴：猩红风暴天赋，猩红风暴buff  <= 5，（连击点 ≥ 5 | 申斥回响豆），10码总人数 > 1         
         elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.enemy.num_in_range_10 > 1 then
@@ -2441,15 +2502,15 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.aura["割裂"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 3 and aura_env.aura["割裂"].effect_min_time <= aura_env.resource.combo_points * 1.2 + 1.2 and (aura_env.aura["毒伤"].time >= 4 or aura_env.aura["毒伤"].time == 0) and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"  
             next_spell.type = 3    
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
         elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "毁伤"   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "毁伤"                   
-        --锁喉：爆发cd < 5，锁喉buff <= 爆发cd + 爆发时间
-        elseif aura_env.burst.cd < 5 and aura_env.aura["锁喉"].time <= aura_env.burst.cd + aura_env.burst.time then
-            next_spell.name = "锁喉"                               
+        --锁喉：爆发cd < 2，锁喉buff <= 爆发cd + 9，非强化锁喉
+        elseif aura_env.burst.cd < 2 and aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= aura_env.burst.cd + 9 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) then
+            next_spell.name = "锁喉"                                
         --割裂：爆发cd < 5，割裂buff <= 爆发cd + 爆发时间 + 3，（连击点 ≥ 5 | 申斥回响豆）
         elseif aura_env.burst.cd < 5 and aura_env.aura["割裂"].time <= aura_env.burst.cd + aura_env.burst.time + 3 and (aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) then
             next_spell.name = "割裂"                               
@@ -2459,8 +2520,11 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
             --不等待：能量 > 300 - 2 * 能量恢复速度
             if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
                 next_spell.if_cast_now = true 
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
+            --不等待：10码总人数 > 2
+            elseif aura_env.enemy.num_in_range_10 > 2 then
+                next_spell.if_cast_now = true                        
+            --等待：锁喉buff > 6，割裂buff > 8
+            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 then
                 next_spell.if_cast_now = false
             end        
         --毁伤：侧袭buff > 0
@@ -2469,22 +2533,9 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --技能类型1：无    
         else
             next_spell.type = 1
-            --不等待：能量 > 300 - 2 * 能量恢复速度
-            if aura_env.resource.energy > 300 - 2 * aura_env.resource.energy_recover_pur_sec then
-                next_spell.if_cast_now = true    
-            --不等待：爆发cd < 3，连击点 <= 5
-            elseif aura_env.burst.cd < 3 and aura_env.resource.combo_points <= 5 then
-                next_spell.if_cast_now = true                   
-            --等待：锁喉buff > 6，割裂buff > 8，10码总人数 <= 1
-            elseif aura_env.aura["锁喉"].time > 6 and aura_env.aura["割裂"].time > 8 and aura_env.enemy.num_in_range_10 <= 1 then
-                next_spell.if_cast_now = false
-            end
         end  
     --循环53：（单君王 | 单毒刃）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，死亡印记cd > 0，死亡印记buff = 0，（（0 < 徘徊黑暗buff < 16，毒刃buff > 0）| 黑暗徘徊buff = 0）                      
     elseif aura_env.loop_id == 53 then
-        if aura_env.talent["申斥回响"] and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time > aura_env.aura["死亡猎手标记"].stack * 4 + 5 then
-            aura_env.status.combo_points_shen_chi_hui_xiang = false
-        end
         --毒刃（君王起手毒刃）：轻巧毒刃天赋，毒刃层数 >= 1，毒刃充能cd <= 15，至黑之夜buff > 0，连击点 >= 6
         if aura_env.talent["轻巧毒刃"] and aura_env.spell["毒刃"].stack >= 1 and aura_env.spell["毒刃"].charge_cd <= 15 and aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points >= 6 then
             next_spell.name = "毒刃"       
@@ -2494,6 +2545,9 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --毒刃（君王后置毒刃）：毒刃cd = 0，毒刃buff < 1，（0 < 君王之灾buff < 8 | （君王之灾cd > 8，君王之灾buff = 0））
         elseif aura_env.spell["毒刃"].cd == 0 and aura_env.aura["毒刃"].time < 1 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time < 8 then
             next_spell.name = "毒刃"       
+        --毒刃（君王后置毒刃）：毒刃cd = 0，君王之灾buff > 0，毒刃buff = 0，至黑之夜buff > 0，连击点 >= 6
+        elseif aura_env.spell["毒刃"].cd == 0 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["毒刃"].time == 0 and aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points >= 6 then
+            next_spell.name = "毒刃"                   
         --君王之灾：君王之灾cd = 0，（毒刃buff = 0 | （毒刃buff > 0，至黑之夜buff == 0，（死亡猎手标记buff层数 < 3 | 连击点 > 0）））
         elseif aura_env.spell["君王之灾"].cd == 0 and (aura_env.aura["毒刃"].time == 0 or (aura_env.aura["毒刃"].time > 0 and aura_env.aura["至黑之夜"].time == 0 and (aura_env.aura["死亡猎手标记"].stack < 3 or aura_env.resource.combo_points > 0))) then
             next_spell.name = "君王之灾"                   
@@ -2504,10 +2558,13 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         elseif aura_env.spell["菊花茶"].stack > 0 and aura_env.aura["菊花茶"].time == 0 and aura_env.aura["君王之灾"].time > 0 and (aura_env.aura["君王之灾"].time <= 5 or (aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points == 7)) then
             next_spell.name = "菊花茶"            
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
-            next_spell.name = "锁喉"        
-        --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，（（至黑之夜buff > 0，连击点 = 6）|（至黑之夜buff = 0，连击点 = 4））
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points == 6) or (aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points == 4)) then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
+            next_spell.name = "锁喉"       
+        --锁喉：锁喉cd = 0，锁喉buff <= 9，非强化锁喉，毒刃buff = 0，连击点 <= 4
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 9 and (not aura_env.aura["锁喉"].super) and aura_env.aura["毒刃"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 4 then
+            next_spell.name = "锁喉"               
+        --锁喉：锁喉cd = 0，锁喉buff <= 9，非强化锁喉，（（至黑之夜buff > 0，连击点 = 6）|（至黑之夜buff = 0，连击点 = 4））
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 9 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and ((aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points == 6) or (aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points == 4)) then
             next_spell.name = "锁喉"                       
         --割裂：割裂buff <= 1，连击点 > 0         
         elseif aura_env.aura["割裂"].time <= 1 and aura_env.resource.combo_points > 0 then
@@ -2515,12 +2572,15 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --割裂：割裂buff <= 君王之灾buff（不存在算14） + 3，毒刃buff = 0，连击点 >= 5         
         elseif (aura_env.aura["割裂"].time <= aura_env.aura["君王之灾"].time + 3 or (aura_env.aura["君王之灾"].time == 0 and aura_env.aura["割裂"].time <= 17)) and aura_env.aura["毒刃"].time == 0 and aura_env.resource.combo_points >= 5 then
             next_spell.name = "割裂"                  
-        --猩红风暴：猩红风暴天赋，猩红风暴buff <= 5，毒刃buff = 0，连击点 >= 5，10码总人数 > 1     
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 10 and aura_env.aura["毒刃"].time == 0 and aura_env.resource.combo_points >= 5 and aura_env.enemy.num_in_range_10 > 1 then
+        --猩红风暴：猩红风暴天赋，猩红风暴buff <= 5，连击点 >= 5，10码总人数 > 1     
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points >= 5 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "猩红风暴"                    
-        --毁伤：10码总人数 > 1，腐蚀飞溅buff <= 1，连击点 < 5
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.enemy.num_in_range_10 > 1 and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "毁伤" 
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"   
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                
         --申斥回响：申斥回响天赋，申斥回响cd = 0，连击点 < 5
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"   
@@ -2530,101 +2590,107 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --剧毒之刃：至黑之夜buff > 0，死亡印记buff = 0，连击点 = 6，8 < 增效药膏buff层数 < 10，10码总人数 <= 1
         elseif aura_env.aura["至黑之夜"].time > 0 and aura_env.aura["死亡印记"].time == 0 and aura_env.resource.combo_points == 6 and aura_env.aura["增效药膏"].stack > 8 and aura_env.aura["增效药膏"].stack < 10 and aura_env.enemy.num_in_range_10 <= 1 then
             next_spell.name = "剧毒之刃"                  
-        --毒伤：（（连击点 >= 5，申斥回响豆），至黑之夜buff = 0） | 连击点 = 7
-        elseif ((aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.aura["至黑之夜"].time == 0) or aura_env.resource.combo_points == 7 then
+        --毒伤：（连击点 >= 5，至黑之夜buff = 0） | 连击点 = 7 | （申斥回响豆，毒刃buff > 0）
+        elseif (aura_env.resource.combo_points >= 5 and aura_env.aura["至黑之夜"].time == 0) or aura_env.resource.combo_points == 7 or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.aura["毒刃"].time > 0) then
             next_spell.name = "毒伤" 
         --技能类型1
         else
             next_spell.type = 1
         end        
     --循环52：（消失死印君王）爆发，（死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋，非连环屠戮天赋  
-    elseif aura_env.loop_id == 52 then
-        if aura_env.talent["申斥回响"] and aura_env.aura["死亡印记"].time > 0 or aura_env.aura["死亡猎手标记"].stack <= 1 then
-            aura_env.status.combo_points_shen_chi_hui_xiang = false
-        end        
-        --死亡印记：死亡印记cd = 0
-        if aura_env.spell["死亡印记"].cd == 0 then
-            next_spell.name = "死亡印记"
-        --消失：消失cd = 0，非连环屠戮天赋，至黑之夜buff > 0，死亡猎手标记buff = 0
-        elseif aura_env.spell["消失"].cd == 0 and (not aura_env.talent["连环屠戮"]) and aura_env.aura["至黑之夜"].time > 0 and aura_env.aura["死亡猎手标记"].time == 0 then
-            next_spell.name = "消失"   
-        --毒刃：轻巧毒刃天赋，毒刃cd = 0，毒刃buff = 0，君王之灾buff = 0，至黑之夜buff > 0，（连击点 >= 6 | （连击点 >= 5，死亡印记buff < 13））
-        elseif aura_env.talent["轻巧毒刃"] and aura_env.spell["毒刃"].cd == 0 and aura_env.aura["毒刃"].time == 0 and aura_env.aura["君王之灾"].time == 0 and aura_env.aura["至黑之夜"].time > 0 and (aura_env.resource.combo_points >= 6 or (aura_env.resource.combo_points >= 5 and aura_env.aura["死亡印记"].time < 13)) then
-            next_spell.name = "毒刃"       
-        --毒刃：毒刃cd = 0，毒刃buff < 1，0 < 君王之灾buff < 8，死亡猎手标记buff层数 <= 1 
-        elseif aura_env.spell["毒刃"].cd == 0 and aura_env.aura["毒刃"].time < 1 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time < 8 and aura_env.aura["死亡猎手标记"].stack <= 1 then
-            next_spell.name = "毒刃"       
-        --君王之灾：君王之灾cd = 0，（非轻巧毒刃天赋 | 毒刃buff > 0），0 < 死亡印记buff < 12         
-        elseif aura_env.spell["君王之灾"].cd == 0 and ((not aura_env.talent["轻巧毒刃"]) or aura_env.aura["毒刃"].time > 0) and aura_env.aura["死亡印记"].time > 0 and aura_env.aura["死亡印记"].time < 12 then
-            next_spell.name = "君王之灾"                   
-        --菊花茶：菊花茶层数 > 0，菊花茶buff = 0，0 < 君王之灾buff <= 5     
-        elseif aura_env.spell["菊花茶"].stack > 0 and aura_env.aura["菊花茶"].time == 0 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time <= 5 then
-            next_spell.name = "菊花茶"
-        --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
-            next_spell.name = "锁喉"        
-        --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，（（至黑之夜buff > 0，连击点 = 6）|（至黑之夜buff = 0，连击点 = 4））
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points == 6) or (aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points == 4)) then
-            next_spell.name = "锁喉"                       
-        --割裂：割裂buff < 1，连击点 > 0         
-        elseif aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
-            next_spell.name = "割裂"    
-        --割裂：割裂buff <= 君王之灾buff（不存在算14） + 3，毒刃buff = 0，连击点 >= 5         
-        elseif (aura_env.aura["割裂"].time <= aura_env.aura["君王之灾"].time + 3 or (aura_env.aura["君王之灾"].time == 0 and aura_env.aura["割裂"].time <= 17)) and aura_env.aura["毒刃"].time == 0 and aura_env.resource.combo_points >= 5 then
-            next_spell.name = "割裂"                  
-        --猩红风暴：猩红风暴天赋，猩红风暴buff <= 5，毒刃buff = 0，连击点 >= 5，10码总人数 > 1     
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 10 and aura_env.aura["毒刃"].time == 0 and aura_env.resource.combo_points >= 5 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "猩红风暴"                     
-        --毁伤：10码总人数 > 1，腐蚀飞溅buff <= 1，连击点 < 5
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.enemy.num_in_range_10 > 1 and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "毁伤" 
-        --申斥回响：申斥回响天赋，申斥回响cd = 0，连击点 < 5
-        elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "申斥回响"   
-        --刀扇：见者尽灭buff > 0，连击点 < 5
-        elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "刀扇"               
-        --剧毒之刃：至黑之夜buff > 0，死亡印记buff = 0，连击点 = 6，8 < 增效药膏buff层数 < 10，10码总人数 <= 1
-        elseif aura_env.aura["至黑之夜"].time > 0 and aura_env.aura["死亡印记"].time == 0 and aura_env.resource.combo_points == 6 and aura_env.aura["增效药膏"].stack > 8 and aura_env.aura["增效药膏"].stack < 10 and aura_env.enemy.num_in_range_10 <= 1 then
-            next_spell.name = "剧毒之刃"                  
-        --毒伤：（（连击点 >= 5，申斥回响豆），至黑之夜buff = 0） | 连击点 = 7
-        elseif ((aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.aura["至黑之夜"].time == 0) or aura_env.resource.combo_points == 7 then
-            next_spell.name = "毒伤" 
-        --技能类型1
-        else
-            next_spell.type = 1
-        end
+    -- elseif aura_env.loop_id == 52 then    
+    --     --死亡印记：死亡印记cd = 0
+    --     if aura_env.spell["死亡印记"].cd == 0 then
+    --         next_spell.name = "死亡印记"
+    --     --消失：消失cd = 0，非连环屠戮天赋，至黑之夜buff > 0，死亡猎手标记buff = 0
+    --     elseif aura_env.spell["消失"].cd == 0 and (not aura_env.talent["连环屠戮"]) and aura_env.aura["至黑之夜"].time > 0 and aura_env.aura["死亡猎手标记"].time == 0 then
+    --         next_spell.name = "消失"   
+    --     --毒刃：轻巧毒刃天赋，毒刃cd = 0，毒刃buff = 0，君王之灾buff = 0，至黑之夜buff > 0，（连击点 >= 6 | （连击点 >= 5，死亡印记buff < 13））
+    --     elseif aura_env.talent["轻巧毒刃"] and aura_env.spell["毒刃"].cd == 0 and aura_env.aura["毒刃"].time == 0 and aura_env.aura["君王之灾"].time == 0 and aura_env.aura["至黑之夜"].time > 0 and (aura_env.resource.combo_points >= 6 or (aura_env.resource.combo_points >= 5 and aura_env.aura["死亡印记"].time < 13)) then
+    --         next_spell.name = "毒刃"       
+    --     --毒刃：毒刃cd = 0，毒刃buff < 1，0 < 君王之灾buff < 8，死亡猎手标记buff层数 <= 1 
+    --     elseif aura_env.spell["毒刃"].cd == 0 and aura_env.aura["毒刃"].time < 1 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time < 8 and aura_env.aura["死亡猎手标记"].stack <= 1 then
+    --         next_spell.name = "毒刃"       
+    --     --君王之灾：君王之灾cd = 0，（非轻巧毒刃天赋 | 毒刃buff > 0），0 < 死亡印记buff < 12         
+    --     elseif aura_env.spell["君王之灾"].cd == 0 and ((not aura_env.talent["轻巧毒刃"]) or aura_env.aura["毒刃"].time > 0) and aura_env.aura["死亡印记"].time > 0 and aura_env.aura["死亡印记"].time < 12 then
+    --         next_spell.name = "君王之灾"                   
+    --     --菊花茶：菊花茶层数 > 0，菊花茶buff = 0，0 < 君王之灾buff <= 5     
+    --     elseif aura_env.spell["菊花茶"].stack > 0 and aura_env.aura["菊花茶"].time == 0 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time <= 5 then
+    --         next_spell.name = "菊花茶"
+    --     --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
+    --     elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+    --         next_spell.name = "锁喉"     
+    --     --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，毒刃buff = 0，（（至黑之夜buff > 0，连击点 <= 6）|（至黑之夜buff = 0，连击点 <= 4））
+    --     elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points <= 6) or (aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points <= 4)) then
+    --         next_spell.name = "锁喉"                            
+    --     --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，（（至黑之夜buff > 0，连击点 = 6）|（至黑之夜buff = 0，连击点 = 4））
+    --     elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points == 6) or (aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points == 4)) then
+    --         next_spell.name = "锁喉"                       
+    --     --割裂：割裂buff < 1，连击点 > 0         
+    --     elseif aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
+    --         next_spell.name = "割裂"    
+    --     --割裂：割裂buff <= 君王之灾buff（不存在算14） + 3，毒刃buff = 0，连击点 >= 5         
+    --     elseif (aura_env.aura["割裂"].time <= aura_env.aura["君王之灾"].time + 3 or (aura_env.aura["君王之灾"].time == 0 and aura_env.aura["割裂"].time <= 17)) and aura_env.aura["毒刃"].time == 0 and aura_env.resource.combo_points >= 5 then
+    --         next_spell.name = "割裂"                  
+    --     --猩红风暴：猩红风暴天赋，猩红风暴buff <= 5，毒刃buff = 0，连击点 >= 5，10码总人数 > 1     
+    --     elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 10 and aura_env.aura["毒刃"].time == 0 and aura_env.resource.combo_points >= 5 and aura_env.enemy.num_in_range_10 > 1 then
+    --         next_spell.name = "猩红风暴"                     
+    --     --毁伤：10码总人数 > 1，腐蚀飞溅buff <= 1，连击点 < 5
+    --     elseif aura_env.talent["腐蚀飞溅"] and aura_env.enemy.num_in_range_10 > 1 and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 5 then
+    --         next_spell.name = "毁伤" 
+    --     --申斥回响：申斥回响天赋，申斥回响cd = 0，连击点 < 5
+    --     elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
+    --         next_spell.name = "申斥回响"   
+    --     --刀扇：见者尽灭buff > 0，连击点 < 5
+    --     elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 5 then
+    --         next_spell.name = "刀扇"               
+    --     --剧毒之刃：至黑之夜buff > 0，死亡印记buff = 0，连击点 = 6，8 < 增效药膏buff层数 < 10，10码总人数 <= 1
+    --     elseif aura_env.aura["至黑之夜"].time > 0 and aura_env.aura["死亡印记"].time == 0 and aura_env.resource.combo_points == 6 and aura_env.aura["增效药膏"].stack > 8 and aura_env.aura["增效药膏"].stack < 10 and aura_env.enemy.num_in_range_10 <= 1 then
+    --         next_spell.name = "剧毒之刃"                  
+    --     --毒伤：（（连击点 >= 5，申斥回响豆），至黑之夜buff = 0） | 连击点 = 7
+    --     elseif ((aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.aura["至黑之夜"].time == 0) or aura_env.resource.combo_points == 7 then
+    --         next_spell.name = "毒伤" 
+    --     --技能类型1
+    --     else
+    --         next_spell.type = 1
+    --     end
     --循环51：（死印君王）爆发，(死亡猎手标记buff > 0 | 至黑之夜buff > 0)，（死亡印记cd = 0 | 死亡印记buff > 0 | 徘徊黑暗buff > 0），徘徊黑暗天赋    
     elseif aura_env.loop_id == 51 then
-        if aura_env.talent["申斥回响"] and aura_env.aura["死亡印记"].time > 0 or aura_env.aura["死亡猎手标记"].stack <= 1 then
+        if aura_env.talent["轻巧毒刃"] and aura_env.aura["毒刃"].time == 0 then
             aura_env.status.combo_points_shen_chi_hui_xiang = false
-        end                
-        --死亡印记：死亡印记cd = 0
-        if aura_env.spell["死亡印记"].cd == 0 then
+        end        
+        --死亡印记：死亡印记cd = 0，君王之灾cd <= 7
+        if aura_env.spell["死亡印记"].cd == 0 and aura_env.spell["君王之灾"].cd <= 7 then
             next_spell.name = "死亡印记"          
         --毒刃：轻巧毒刃天赋，毒刃cd = 0，毒刃buff = 0，君王之灾buff = 0，至黑之夜buff > 0，（连击点 >= 6 | （连击点 >= 5，死亡印记buff < 13））
         elseif aura_env.talent["轻巧毒刃"] and aura_env.spell["毒刃"].cd == 0 and aura_env.aura["毒刃"].time == 0 and aura_env.aura["君王之灾"].time == 0 and aura_env.aura["至黑之夜"].time > 0 and (aura_env.resource.combo_points >= 6 or (aura_env.resource.combo_points >= 5 and aura_env.aura["死亡印记"].time < 13)) then
             next_spell.name = "毒刃"                                 
-        --毒刃：轻巧毒刃天赋，毒刃cd = 0，毒刃buff < 1，0 < 君王之灾buff < 8，死亡猎手标记buff层数 <= 1 
-        elseif aura_env.talent["轻巧毒刃"] and aura_env.spell["毒刃"].cd == 0 and aura_env.aura["毒刃"].time < 1 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time < 8 and aura_env.aura["死亡猎手标记"].stack <= 1 then
+        --毒刃：轻巧毒刃天赋，毒刃cd = 0，毒刃buff < 1，0 < 君王之灾buff < 8，死亡猎手标记buff层数 <= 1 ，连击点 < 7
+        elseif aura_env.talent["轻巧毒刃"] and aura_env.spell["毒刃"].cd == 0 and aura_env.aura["毒刃"].time < 1 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time < 8 and aura_env.aura["死亡猎手标记"].stack <= 1 and aura_env.resource.combo_points < 7 then
             next_spell.name = "毒刃"      
-        --毒刃：非轻巧毒刃天赋，毒刃cd = 0，毒刃buff < 1，0 < 君王之灾buff < 8
-        elseif (not aura_env.talent["轻巧毒刃"]) and aura_env.spell["毒刃"].cd == 0 and aura_env.aura["毒刃"].time < 1 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time < 8 then
-            next_spell.name = "毒刃"                 
-        --菊花茶：菊花茶层数 > 0，菊花茶buff = 0，君王之灾即将释放
-        elseif aura_env.spell["菊花茶"].stack >= 2 and aura_env.aura["菊花茶"].time == 0 and aura_env.spell["君王之灾"].cd == 0 and aura_env.aura["死亡印记"].time < 12 and ((aura_env.aura["毒刃"].time > 0 and aura_env.aura["毒刃"].time < 6) or aura_env.aura["毒刃"].time == 0) then
+        --毒刃：非轻巧毒刃天赋，毒刃cd = 0，毒刃buff < 1，0 < 君王之灾buff < 8，连击点 < 7
+        elseif (not aura_env.talent["轻巧毒刃"]) and aura_env.spell["毒刃"].cd == 0 and aura_env.aura["毒刃"].time < 1 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time < 8 and aura_env.resource.combo_points < 7 then
+            next_spell.name = "毒刃"       
+        --毒刃（君王后置毒刃）：毒刃cd = 0，君王之灾buff > 0，毒刃buff = 0，至黑之夜buff > 0，连击点 >= 6
+        elseif aura_env.spell["毒刃"].cd == 0 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["毒刃"].time == 0 and aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points >= 6 then
+            next_spell.name = "毒刃"                                  
+        --菊花茶：连环屠戮天赋，菊花茶层数 > 2，菊花茶buff = 0，君王之灾即将释放
+        elseif aura_env.talent["连环屠戮"] and aura_env.spell["菊花茶"].stack >= 2 and aura_env.aura["菊花茶"].time == 0 and aura_env.spell["君王之灾"].cd == 0 and aura_env.aura["死亡印记"].time > 0 and aura_env.aura["死亡印记"].time < 12 and ((aura_env.aura["毒刃"].time > 0 and aura_env.aura["毒刃"].time < 6) or (aura_env.aura["毒刃"].time == 0 and (not aura_env.talent["轻巧毒刃"]))) then
             next_spell.name = "菊花茶"                       
-        --君王之灾：君王之灾cd = 0，死亡印记buff < 12，（0 < 毒刃buff < 6 | 毒刃buff == 0）    
-        elseif aura_env.spell["君王之灾"].cd == 0 and aura_env.aura["死亡印记"].time < 12 and ((aura_env.aura["毒刃"].time > 0 and aura_env.aura["毒刃"].time < 6) or aura_env.aura["毒刃"].time == 0) then
+        --君王之灾：君王之灾cd = 0，0 < 死亡印记buff < 12，（毒刃buff > 0 |（毒刃buff == 0，非轻巧毒刃天赋））    
+        elseif aura_env.spell["君王之灾"].cd == 0 and aura_env.aura["死亡印记"].time > 0 and aura_env.aura["死亡印记"].time < 12 and (aura_env.aura["毒刃"].time > 0 or (aura_env.aura["毒刃"].time == 0 and (not aura_env.talent["轻巧毒刃"]))) then
             next_spell.name = "君王之灾"    
         --菊花茶：菊花茶层数 > 0，菊花茶buff = 0，0 < 君王之灾buff <= 5     
         elseif aura_env.spell["菊花茶"].stack > 0 and aura_env.aura["菊花茶"].time == 0 and aura_env.aura["君王之灾"].time > 0 and aura_env.aura["君王之灾"].time <= 5 then
             next_spell.name = "菊花茶"
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"        
-        --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，（（至黑之夜buff > 0，连击点 = 6）|（至黑之夜buff = 0，连击点 = 4））
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points == 6) or (aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points == 4)) then
+        --锁喉：锁喉cd = 0，锁喉buff <= 9，非强化锁喉，毒刃buff = 0，连击点 <= 4
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 9 and (not aura_env.aura["锁喉"].super) and aura_env.aura["毒刃"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 4 then
+            next_spell.name = "锁喉"                           
+        --锁喉：锁喉cd = 0，锁喉buff <= 9，非强化锁喉，（（至黑之夜buff > 0，连击点 = 6）|（至黑之夜buff = 0，连击点 = 4））
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 9 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and ((aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points == 6) or (aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points == 4)) then
             next_spell.name = "锁喉"                                      
         --割裂：割裂buff < 1，连击点 > 0         
         elseif aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
@@ -2632,12 +2698,15 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --割裂：割裂buff <= 10，毒刃buff = 0，连击点 >= 5         
         elseif aura_env.aura["割裂"].time <= 12 and aura_env.aura["毒刃"].time == 0 and aura_env.resource.combo_points >= 5 then
             next_spell.name = "割裂"                  
-        --猩红风暴：猩红风暴天赋，猩红风暴buff <= 5，毒刃buff = 0，连击点 >= 5，10码总人数 > 1     
-        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 10 and aura_env.aura["毒刃"].time == 0 and aura_env.resource.combo_points >= 5 and aura_env.enemy.num_in_range_10 > 1 then
+        --猩红风暴：猩红风暴天赋，猩红风暴buff <= 5，连击点 >= 5，10码总人数 > 1     
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and aura_env.aura["至黑之夜"].time == 0 and aura_env.resource.combo_points >= 5 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "猩红风暴"                    
-        --毁伤：10码总人数 > 1，腐蚀飞溅buff <= 1，连击点 < 5
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.enemy.num_in_range_10 > 1 and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "毁伤" 
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"   
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                
         --申斥回响：申斥回响天赋，申斥回响cd = 0，连击点 < 5
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"   
@@ -2647,8 +2716,8 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --剧毒之刃：至黑之夜buff > 0，死亡印记buff = 0，连击点 = 6，8 < 增效药膏buff层数 < 10，10码总人数 <= 1
         elseif aura_env.aura["至黑之夜"].time > 0 and aura_env.aura["死亡印记"].time == 0 and aura_env.resource.combo_points == 6 and aura_env.aura["增效药膏"].stack > 8 and aura_env.aura["增效药膏"].stack < 10 and aura_env.enemy.num_in_range_10 <= 1 then
             next_spell.name = "剧毒之刃"                     
-        --毒伤：（（连击点 >= 5，申斥回响豆），至黑之夜buff = 0） | 连击点 = 7
-        elseif ((aura_env.resource.combo_points >= 5 or aura_env.status.combo_points_shen_chi_hui_xiang) and aura_env.aura["至黑之夜"].time == 0) or aura_env.resource.combo_points == 7 then
+        --毒伤：（连击点 >= 5，至黑之夜buff = 0） | 连击点 = 7 | （申斥回响豆，毒刃buff > 0）
+        elseif (aura_env.resource.combo_points >= 5 and aura_env.aura["至黑之夜"].time == 0) or aura_env.resource.combo_points == 7 or (aura_env.status.combo_points_shen_chi_hui_xiang and aura_env.aura["毒刃"].time > 0) then
             next_spell.name = "毒伤" 
         --技能类型1
         else
@@ -2656,9 +2725,9 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         end              
     --循环50：爆发        
     elseif aura_env.loop_id == 50 then
-        --死亡印记：死亡印记cd <= 爆发cd
-        if aura_env.spell["死亡印记"].cd == 0 then
-            next_spell.name = "死亡印记"
+        --死亡印记：死亡印记cd <= 爆发cd，君王之灾cd <= 2
+        if aura_env.spell["死亡印记"].cd == 0 and aura_env.spell["君王之灾"].cd <= 2 then
+            next_spell.name = "死亡印记"    
         --毒刃：轻巧毒刃天赋，毒刃层数 >= 1，毒刃充能cd <= 8，毒刃buff == 0
         elseif aura_env.talent["轻巧毒刃"] and aura_env.spell["毒刃"].stack >= 1 and aura_env.spell["毒刃"].charge_cd <= 8 and aura_env.aura["毒刃"].time == 0 then
             next_spell.name = "毒刃"                                  
@@ -2677,15 +2746,24 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
         --菊花茶：菊花茶层数 > 0，菊花茶buff = 0，君王之灾buff < 6     
         elseif aura_env.spell["菊花茶"].stack > 0 and aura_env.aura["菊花茶"].time == 0 and aura_env.aura["君王之灾"].time > 2 and aura_env.aura["君王之灾"].time < 5 then
             next_spell.name = "菊花茶"
+        --锁喉：锁喉cd = 0，锁喉buff <= 9，非强化锁喉，毒刃buff = 0，连击点 <= 4
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 9 and (not aura_env.aura["锁喉"].super) and aura_env.aura["毒刃"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 4 then
+            next_spell.name = "锁喉"                                  
         --锁喉：锁喉cd = 0，锁喉buff <= 1，连击点 = 0,4
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and (aura_env.resource.combo_points == 0 or aura_env.resource.combo_points == 4) then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and (aura_env.resource.combo_points == 0 or aura_env.resource.combo_points == 4) then
             next_spell.name = "锁喉"        
         --割裂：割裂buff < 1，连击点 > 0         
         elseif aura_env.aura["割裂"].time < 1 and aura_env.resource.combo_points > 0 then
             next_spell.name = "割裂"      
-        --毁伤：10码总人数 > 1，腐蚀飞溅buff <= 1，连击点 < 5
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.enemy.num_in_range_10 > 1 and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 5 then
-            next_spell.name = "毁伤" 
+        --猩红风暴：猩红风暴天赋，猩红风暴buff <= 5，连击点 >= 5，10码总人数 > 1     
+        elseif aura_env.talent["猩红风暴"] and aura_env.aura["猩红风暴"].time <= 5 and aura_env.resource.combo_points >= 5 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "猩红风暴"                       
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"   
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                
         --申斥回响：申斥回响天赋，申斥回响cd = 0，连击点 < 5
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"                          
@@ -2699,24 +2777,24 @@ aura_env.CalculateSpellTypeByLoopID = function(_if_cast_now)
     --循环60：战斗收尾       
     elseif aura_env.loop_id == 60 then   
         --锁喉：锁喉cd = 0，锁喉buff = 0，连击点 <= 6
-        if aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and aura_env.resource.combo_points <= 6 then
+        if aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time == 0 and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"                                           
         --申斥回响：申斥回响天赋，申斥回响cd = 0，连击点 < 5
         elseif aura_env.talent["申斥回响"] and aura_env.spell["申斥回响"].cd == 0 and aura_env.resource.combo_points < 5 then
             next_spell.name = "申斥回响"              
         --锁喉：锁喉cd = 0，锁喉buff <= 6，非强化锁喉，连击点 <= 6
-        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and aura_env.resource.combo_points <= 6 then
+        elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].time <= 6 and (not aura_env.aura["锁喉"].super) and ((not aura_env.talent["连环屠戮"]) or aura_env.enemy.num_in_range_10 <= 2) and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"                         
         --锁喉（技能类型3）：锁喉buff人数 < 10码内敌人，10码内敌人 <= 2，连击点 <= 6
         elseif aura_env.spell["锁喉"].cd == 0 and aura_env.aura["锁喉"].effect_unit_num < aura_env.enemy.num_in_range_10 and aura_env.enemy.num_in_range_10 <= 2 and aura_env.resource.combo_points <= 6 then
             next_spell.name = "锁喉"  
             next_spell.type = 3                   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，10码总人数 > 1
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff = 0，割裂buff > 0，夺命药膏buff > 0，10码总人数 > 1
         elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time == 0 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.enemy.num_in_range_10 > 1 then
             next_spell.name = "毁伤"   
-        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，连击点 < 7，10码总人数 > 1
-        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
-            next_spell.name = "毁伤"                   
+        --毁伤：腐蚀飞溅天赋，腐蚀飞溅buff <= 1，割裂buff > 0，夺命药膏buff > 0，连击点 < 7，10码总人数 > 1
+        elseif aura_env.talent["腐蚀飞溅"] and aura_env.aura["腐蚀飞溅"].time <= 1 and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 and aura_env.resource.combo_points < 7 and aura_env.enemy.num_in_range_10 > 1 then
+            next_spell.name = "毁伤"                          
         --刀扇：见者尽灭buff > 0，连击点 < 7
         elseif aura_env.aura["见者尽灭"].time > 0 and aura_env.resource.combo_points < 7 then
             next_spell.name = "刀扇"                         
@@ -2751,7 +2829,7 @@ aura_env.CalculateSpellBySpellType = function()
     elseif aura_env.next_spell.type == 3 then
         aura_env.next_spell.extra_text = "换目标"
     else
-        print("aura_env.next_spell not exist! id: ", aura_env.next_spell.type)
+        print("aura_env.next_spell.type not exist! id: ", aura_env.next_spell.type)
     end
     --诡诈状态下，毁伤替换为伏击
     if aura_env.aura["诡诈"].time > 0 and aura_env.next_spell.name == "毁伤" then
@@ -2761,10 +2839,17 @@ end
 
 --将要使用的技能压入队列
 aura_env.PushSpell = function(_index)
+    local burst_type = 0
+    if math.floor(aura_env.loop_id * 0.1) == 4 then
+        burst_type = 1
+    elseif math.floor(aura_env.loop_id * 0.1) == 5 then
+        burst_type = 2
+    end   
     aura_env.spell_queue[_index] = {
         spell_name = aura_env.next_spell.name,
         if_spell_cast_now = aura_env.next_spell.if_cast_now,
-        extra_text = aura_env.next_spell.extra_text
+        extra_text = aura_env.next_spell.extra_text,
+        burst_type = burst_type
     }
 end
 
@@ -2814,6 +2899,7 @@ aura_env.UpdateResouceByCastSpell = function(_index)
         aura_env.aura["夺命药膏"].effect_unit_num = aura_env.enemy.num_in_range_10
         aura_env.aura["增效药膏"].stack = aura_env.aura["增效药膏"].stack + 0.5
         aura_env.aura["潜行"].time = 0
+        aura_env.aura["消失"].time = 0
     elseif aura_env.next_spell.name == "剧毒之刃" then
         aura_env.aura["潜行"].time = 0
         aura_env.aura["增效药膏"].time = 12
@@ -2824,7 +2910,7 @@ aura_env.UpdateResouceByCastSpell = function(_index)
             aura_env.resource.energy = aura_env.resource.energy - 50
         end    
     elseif aura_env.next_spell.name == "伏击" then
-        if aura_env.talent["腐蚀飞溅"] and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 then
+        if aura_env.talent["腐蚀飞溅"] and aura_env.aura["割裂"].time > 0 then
             aura_env.aura["腐蚀飞溅"].time = 10            
         end 
         if aura_env.aura["死亡猎手标记"].time == 0 then
@@ -2836,6 +2922,7 @@ aura_env.UpdateResouceByCastSpell = function(_index)
         aura_env.aura["夺命药膏"].time = 12
         aura_env.aura["增效药膏"].stack = aura_env.aura["增效药膏"].stack + 0.3
         aura_env.aura["潜行"].time = 0
+        aura_env.aura["消失"].time = 0
         if aura_env.talent["强化伏击"] then
             aura_env.resource.combo_points = math.min(aura_env.resource.combo_points + 3, aura_env.resource.combo_points_max)
         else
@@ -2849,13 +2936,14 @@ aura_env.UpdateResouceByCastSpell = function(_index)
             end
         end        
     elseif aura_env.next_spell.name == "毁伤" then
-        if aura_env.talent["腐蚀飞溅"] and aura_env.aura["割裂"].time > 0 and aura_env.aura["夺命药膏"].time > 0 then
+        if aura_env.talent["腐蚀飞溅"] and aura_env.aura["割裂"].time > 0 then
             aura_env.aura["腐蚀飞溅"].time = 10            
         end 
         aura_env.aura["增效药膏"].time = 12
         aura_env.aura["夺命药膏"].time = 12
         aura_env.aura["增效药膏"].stack = aura_env.aura["增效药膏"].stack + 0.6
         aura_env.aura["潜行"].time = 0
+        aura_env.aura["消失"].time = 0
         if aura_env.aura["侧袭"].time > 0 then
             if aura_env.talent["强化伏击"] then
                 aura_env.resource.combo_points = math.min(aura_env.resource.combo_points + 3, aura_env.resource.combo_points_max)
@@ -2901,19 +2989,27 @@ aura_env.UpdateResouceByCastSpell = function(_index)
         aura_env.aura["增效药膏"].stack = aura_env.aura["增效药膏"].stack + 0.3
         aura_env.resource.energy = aura_env.resource.energy - 45
         aura_env.aura["潜行"].time = 0
+        aura_env.aura["消失"].time = 0
     elseif aura_env.next_spell.name == "申斥回响" then
         aura_env.aura["申斥回响-3"].time = 45
         aura_env.aura["申斥回响-4"].time = 45
         aura_env.aura["申斥回响-5"].time = 45
+        aura_env.aura["增效药膏"].time = 12
+        aura_env.aura["夺命药膏"].time = 12
+        aura_env.aura["增效药膏"].stack = aura_env.aura["增效药膏"].stack + 0.3        
         aura_env.aura["潜行"].time = 0
+        aura_env.aura["消失"].time = 0
         aura_env.resource.combo_points = math.min(aura_env.resource.combo_points + 2, aura_env.resource.combo_points_max)
         aura_env.resource.energy = aura_env.resource.energy - 10
     elseif aura_env.next_spell.name == "毒伤" then
         final_skill = true
         aura_env.aura["毒伤"].time = math.min(aura_env.aura["毒伤"].time + final_skill_combo_points, math.floor(final_skill_combo_points * 1.3))   
-        aura_env.aura["切割"].time = math.min(aura_env.aura["切割"].time + final_skill_combo_points * 3, 54)
+        if aura_env.aura["切割"].time > 0 then
+            aura_env.aura["切割"].time = math.min(aura_env.aura["切割"].time + final_skill_combo_points * 3, 54)
+        end
         aura_env.aura["潜行"].time = 0
-        if aura_env.aura["至黑之夜"].time > 0 and aura_env.resource.combo_points == 7 then
+        aura_env.aura["消失"].time = 0
+        if aura_env.aura["至黑之夜"].time > 0 and final_skill_combo_points == 7 then
             if aura_env.aura["死亡猎手标记"].time == 0 then
                 aura_env.aura["死亡猎手标记"].time = 60
                 aura_env.aura["死亡猎手标记"].stack = 3
@@ -2925,7 +3021,7 @@ aura_env.UpdateResouceByCastSpell = function(_index)
                 end                
             end
             aura_env.aura["至黑之夜"].time = 0
-        elseif aura_env.aura["死亡猎手标记"].stack > 0 and aura_env.resource.combo_points >= 5 then
+        elseif aura_env.aura["死亡猎手标记"].stack > 0 and final_skill_combo_points >= 5 then
             aura_env.aura["死亡猎手标记"].stack = aura_env.aura["死亡猎手标记"].stack - 1
             if aura_env.aura["死亡猎手标记"].stack == 0 then
                 aura_env.aura["死亡猎手标记"].time = 0
@@ -2946,13 +3042,14 @@ aura_env.UpdateResouceByCastSpell = function(_index)
         if aura_env.talent["死亡猎手标记"] then
             aura_env.aura["割裂"].time = math.min(aura_env.aura["割裂"].time + final_skill_combo_points * 4 + 7, math.floor((final_skill_combo_points * 4 + 7) * 1.3))   
         else
-            aura_env.aura["割裂"].time = math.min(aura_env.aura["割裂"].time + final_skill_combo_points * 4 + 7, math.floor((final_skill_combo_points * 4 + 7) * 1.3))   
+            aura_env.aura["割裂"].time = math.min(aura_env.aura["割裂"].time + final_skill_combo_points * 4 + 4, math.floor((final_skill_combo_points * 4 + 4) * 1.3))   
         end
         if aura_env.aura["割裂"].effect_min_time == 0 then
             aura_env.aura["割裂"].effect_min_time = aura_env.aura["割裂"].time
         end
         aura_env.aura["潜行"].time = 0
-        if aura_env.aura["死亡猎手标记"].stack > 0 and aura_env.resource.combo_points >= 5 then
+        aura_env.aura["消失"].time = 0
+        if aura_env.aura["死亡猎手标记"].stack > 0 and final_skill_combo_points >= 5 then
             aura_env.aura["死亡猎手标记"].stack = aura_env.aura["死亡猎手标记"].stack - 1
             if aura_env.aura["死亡猎手标记"].stack == 0 then
                 aura_env.aura["死亡猎手标记"].stack = 0
@@ -2991,7 +3088,8 @@ aura_env.UpdateResouceByCastSpell = function(_index)
             aura_env.aura["猩红风暴"].effect_min_time = aura_env.aura["猩红风暴"].time
         end
         aura_env.aura["潜行"].time = 0
-        if aura_env.aura["死亡猎手标记"].stack > 0 and final_skill_combo_points > 4 then
+        aura_env.aura["消失"].time = 0
+        if aura_env.aura["死亡猎手标记"].stack > 0 and final_skill_combo_points >= 5 then
             aura_env.aura["死亡猎手标记"].stack = aura_env.aura["死亡猎手标记"].stack - 1
             if aura_env.aura["死亡猎手标记"].stack == 0 then
                 aura_env.aura["死亡猎手标记"].stack = 0
@@ -3007,6 +3105,7 @@ aura_env.UpdateResouceByCastSpell = function(_index)
     elseif aura_env.next_spell.name == "毒刃" then
         aura_env.aura["毒刃"].time = 8 
         aura_env.aura["潜行"].time = 0
+        aura_env.aura["消失"].time = 0
         aura_env.aura["增效药膏"].time = 12
         aura_env.aura["夺命药膏"].time = 12
         aura_env.aura["增效药膏"].stack = aura_env.aura["增效药膏"].stack + 0.3
@@ -3015,6 +3114,7 @@ aura_env.UpdateResouceByCastSpell = function(_index)
     elseif aura_env.next_spell.name == "君王之灾" then
         aura_env.aura["君王之灾"].time = 14 
         aura_env.aura["潜行"].time = 0
+        aura_env.aura["消失"].time = 0
         aura_env.aura["增效药膏"].time = 12
         aura_env.aura["夺命药膏"].time = 12
         aura_env.aura["增效药膏"].stack = aura_env.aura["增效药膏"].stack + 0.3
@@ -3026,6 +3126,7 @@ aura_env.UpdateResouceByCastSpell = function(_index)
         end
         aura_env.aura["死亡印记"].time = 16 
         aura_env.aura["潜行"].time = 0
+        aura_env.aura["消失"].time = 0
     elseif aura_env.next_spell.name == "切割" then
         aura_env.status.combo_points_shen_chi_hui_xiang = false
         aura_env.aura["切割"].time = math.min(aura_env.aura["切割"].time + 6 + aura_env.resource.combo_points * 6, 54)
@@ -3042,6 +3143,9 @@ aura_env.UpdateResouceByCastSpell = function(_index)
             aura_env.aura["连环屠戮-潜行"].time = 6
             aura_env.aura["连环屠戮"].time = 6
         end        
+        if aura_env.talent["诡诈"] then
+            aura_env.aura["诡诈"].time = 6
+        end                
     elseif aura_env.next_spell.name == "潜行" then
         aura_env.aura["潜行"].time = 9999
         if aura_env.talent["强化锁喉"] then
@@ -3187,6 +3291,7 @@ aura_env.ShowSpell = function(_allstates)
             local cd_text = ""
             local stack_text = ""
             local cd = spell.charge_cd_raw
+            local burst_type = aura_env.pre_spell_queue[i].burst_type
             --忽略gcd的影响
             if spell.cd_raw == aura_env.gcd.cd_raw then
                 cd = 0
@@ -3214,9 +3319,6 @@ aura_env.ShowSpell = function(_allstates)
             if spell.max_stack > 1 then
                 stack_text = stack_text..spell.stack_raw
             end   
-            if spell.cd_raw > aura_env.gcd.duration then
-                if_spell_cast_now = false
-            end
             if i == 1 then
                 _allstates[i] = {
                     duration = aura_env.pre_spell_queue[i].duration,
@@ -3229,7 +3331,8 @@ aura_env.ShowSpell = function(_allstates)
                     cdText = aura_env.pre_spell_queue[i].cdText,
                     stackText = aura_env.pre_spell_queue[i].stackText,
                     ifSpellCastNow = aura_env.pre_spell_queue[i].ifSpellCastNow,
-                    index = i
+                    index = i,
+                    burstType = aura_env.pre_spell_queue[i].burstType
                 }         
             else
                 _allstates[i] = {
@@ -3243,7 +3346,8 @@ aura_env.ShowSpell = function(_allstates)
                     cdText = cd_text,
                     stackText = stack_text,
                     ifSpellCastNow = if_spell_cast_now,
-                    index = i
+                    index = i,
+                    burstType = burst_type
                 } 
             end
         end         
@@ -3259,6 +3363,7 @@ aura_env.ShowSpell = function(_allstates)
             local cd_text = ""
             local stack_text = ""
             local cd = spell.charge_cd_raw
+            local burst_type = aura_env.spell_queue[i].burst_type
             if cd >= 60 then
                 local min = math.floor(cd / 60)
                 local sec = math.floor(cd - min * 60)
@@ -3281,9 +3386,6 @@ aura_env.ShowSpell = function(_allstates)
             if spell.max_stack > 1 then
                 stack_text = stack_text..spell.stack_raw
             end   
-            if spell.cd_raw > aura_env.gcd.duration then
-                if_spell_cast_now = false
-            end
             _allstates[i] = {
                 duration = spell.duration,
                 expirationTime = aura_env.time + spell.cd_raw,
@@ -3295,7 +3397,8 @@ aura_env.ShowSpell = function(_allstates)
                 cdText = cd_text,
                 stackText = stack_text,
                 ifSpellCastNow = if_spell_cast_now,
-                index = i
+                index = i,
+                burstType = burst_type
             }
         end 
     end
@@ -3307,13 +3410,15 @@ aura_env.ShowSpell = function(_allstates)
             expirationTime = _allstates[1].expirationTime,
             cdText = _allstates[1].cdText,
             stackText = _allstates[1].stackText,
-            ifSpellCastNow = _allstates[1].ifSpellCastNow
+            ifSpellCastNow = _allstates[1].ifSpellCastNow,
+            burstType = _allstates[1].ifSpellCastNow,
         }
         for i = 2, aura_env.config.SkillQueueSize do
             aura_env.pre_spell_queue[i] = {
                 spell_name = aura_env.spell_queue[i].spell_name,
                 if_spell_cast_now = aura_env.spell_queue[i].if_spell_cast_now,
-                extra_text = aura_env.spell_queue[i].extra_text
+                extra_text = aura_env.spell_queue[i].extra_text,
+                burst_type = aura_env.spell_queue[i].burst_type,
             }
         end
     end

@@ -64,14 +64,14 @@ function(_allstates, event, ...)
             aura_env.CalculateSpellTypeByLoopID(true)
             --根据技能类型计算技能
             aura_env.CalculateSpellBySpellType()
+            --将要使用的技能压入队列
+            aura_env.PushSpell(i)
             --使用技能
             aura_env.CastSpell()
             --根据释放技能修改相关属性
             aura_env.UpdateResouceByCastSpell(i)
             --根据释放技能更新冷却
             aura_env.UpdateCooldownByCastSpell()
-            --将要使用的技能压入队列
-            aura_env.PushSpell(i)            
             --更新自然回复的战斗资源
             aura_env.UpdateResouce()
             --更新专属信息
